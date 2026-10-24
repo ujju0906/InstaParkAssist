@@ -5,9 +5,12 @@
  * data/db.json between restarts. If that file is missing, it's seeded from
  * data/seed.json.
  *
- * Holds spots, bookings, and the community points ledger (see points.js).
- * Balances are never stored; they're the sum of a member's ledger entries,
- * so the books always balance.
+ * Holds spots, bookings, the community points ledger (see points.js), and
+ * login accounts (see auth.js). Balances are never stored; they're the sum
+ * of a member's ledger entries, so the books always balance.
+ *
+ * Accounts and the session-signing secret survive "reset demo data" and
+ * "clear bookings", so resetting never locks anyone out.
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -16,14 +19,15 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { todayISO } from './dates.js';
 import { WELCOME_POINTS, pointsFor, memberKey } from './points.js';
+import { generateSecret } from './auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, '..', 'data');
 const DB_PATH = join(DATA_DIR, 'db.json');
 const SEED_PATH = join(DATA_DIR, 'seed.json');
 
-function emptyDb(spots = []) {
-  return { spots, bookings: [], members: {}, ledger: [] };
+function emptyDb(spots = [], users = [], sessionSecret = null) {
+  return { spots, bookings: [], members: {}, ledger: [], users, sessionSecret };
 }
 
 function seedSpots() {
@@ -48,6 +52,15 @@ let db = load();
   let changed = false;
   db.members ??= {};
   db.ledger ??= [];
+  db.users ??= [];
+  db.sessionSecret ??= null;
+  for (const u of db.users) {
+    // Driver ("user") and "host" accounts merged into one "member" role.
+    if (u.role === 'user' || u.role === 'host') {
+      u.role = 'member';
+      changed = true;
+    }
+  }
   for (const s of db.spots) {
     // Spots no longer have prices: parking costs the same flat points everywhere.
     if ('pricePerHour' in s) {
@@ -83,10 +96,15 @@ export function getSpot(id) {
   return db.spots.find((s) => s.id === id);
 }
 
-/** Expects input already validated by validateSpotInput() (requests.js). */
-export function addSpot(spot) {
+/**
+ * Expects input already validated by validateSpotInput() (requests.js).
+ * ownerId is the account that may manage the spot (null for seed spots,
+ * which only admins can remove).
+ */
+export function addSpot(spot, ownerId = null) {
   const record = {
     id: randomUUID(),
+    ownerId,
     hostName: spot.hostName?.trim() || 'Anonymous host',
     label: spot.label?.trim() || 'Parking spot',
     lat: Number(spot.lat),
@@ -257,8 +275,71 @@ export function clearBookings() {
   persist();
 }
 
+/** Back to the seed spots, keeping accounts and the session secret. */
 export function resetToSeed() {
-  db = emptyDb(seedSpots());
+  db = emptyDb(seedSpots(), db.users, db.sessionSecret);
   persist();
   return db;
+}
+
+// --- Accounts --------------------------------------------------------------
+
+/** HMAC secret for session cookies. SESSION_SECRET env wins; else generated once and kept in db.json. */
+export function getSessionSecret() {
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  if (!db.sessionSecret) {
+    db.sessionSecret = generateSecret();
+    persist();
+  }
+  return db.sessionSecret;
+}
+
+export function getUserById(id) {
+  return db.users.find((u) => u.id === id);
+}
+
+export function getUserByUsername(username) {
+  return db.users.find((u) => u.username === username);
+}
+
+export function hasAdmin() {
+  return db.users.some((u) => u.role === 'admin');
+}
+
+/**
+ * Is this display name already someone's identity? Points and spots are
+ * keyed by name, so a new account must not take over an existing member,
+ * host, or account name.
+ */
+export function isNameTaken(displayName) {
+  const key = memberKey(displayName);
+  return (
+    db.users.some((u) => memberKey(u.displayName) === key) ||
+    Boolean(db.members[key]) ||
+    db.spots.some((s) => memberKey(s.hostName) === key)
+  );
+}
+
+/** Expects input already validated (auth.js) and a hashed password. */
+export function createUser({ username, displayName, role, salt, hash }) {
+  const user = {
+    id: randomUUID(),
+    username,
+    displayName,
+    role,
+    salt,
+    hash,
+    createdAt: new Date().toISOString(),
+  };
+  db.users.push(user);
+  persist();
+  return user;
+}
+
+export function updateUser(id, changes) {
+  const user = getUserById(id);
+  if (!user) return null;
+  Object.assign(user, changes);
+  persist();
+  return user;
 }

@@ -15,7 +15,8 @@ ParkAssistKiro/
 │   ├── batcher.js         # Live queue: batch window -> solve -> book -> events
 │   ├── simulator.js       # In-process demo traffic driven by an arrival plan
 │   ├── demoData.js        # Demo destinations, random + scripted "rush" plans (pure)
-│   └── store.js           # JSON-file data store (spots, bookings)
+│   ├── auth.js            # Roles, password hashing, signed session cookies, throttle (no I/O)
+│   └── store.js           # JSON-file data store (spots, bookings, points, accounts)
 ├── scripts/
 │   ├── simulate.js        # CLI traffic generator (npm run simulate)
 │   ├── warm-routes.js     # Pre-fetch entrance x spot walking routes into the cache
@@ -37,6 +38,11 @@ ParkAssistKiro/
 ## Responsibilities
 
 - **server.js** — HTTP surface only. Validates input, delegates to `src/`.
+  Owns authorization: a middleware sets `req.user` from the session cookie,
+  and every `/api` route except `/api/auth/*` and `/api/points` is guarded by
+  `requireRole(...)` (`signedIn`, `adminOnly`). New routes must pick a guard.
+  Driver identity (`userName` on bookings/assignments) comes from
+  `req.user.displayName`, never the request body (admins excepted for batches).
 - **src/hungarian.js** — the optimization core. Pure function, no I/O. The place
   to look when reasoning about assignment correctness.
 - **src/assign.js** — glue between live data and the solver; also owns the
@@ -56,13 +62,27 @@ ParkAssistKiro/
 - **public/live.js** is a classic script loaded after `app.js` and uses its
   top-level globals (`map`, `liveLayer`, `esc`, `api`, `renderSpots`,
   `activateTab`). Keep both as non-module scripts or convert them together.
+  Its event stream only opens when `app.js` calls `startLiveStream()` for
+  an admin.
+- **Client roles** — `app.js` boots from `GET /api/auth/me`: no user shows
+  the sign-in screen; otherwise `applyRole()` hides every element whose
+  `data-roles` attribute doesn't list the role, and `activateTab()` refuses
+  tabs the role can't open.
 
 ## Data model
 
-- **Spot**: `{ id, hostName, label, lat, lng, availableFrom,
+- **User** (`db.users`): `{ id, username, displayName, role: 'member' |
+  'admin', salt, hash, createdAt }`. Old `'user'`/`'host'` roles are
+  migrated to `'member'` on load. `username` is lowercase and
+  unique; `displayName` is unique by `memberKey()` and is the member name
+  used for points. Never send `salt`/`hash` to clients (`publicUser()`).
+  `db.sessionSecret` signs cookies unless `SESSION_SECRET` is set. Both
+  survive `resetToSeed()` and `clearBookings()`.
+- **Spot**: `{ id, ownerId, hostName, label, lat, lng, availableFrom,
   availableUntil, availableFromDate, availableUntilDate }`. Times are daily
   hours; the dates are an optional inclusive range (`null` = no limit). Seed
-  spots have no date range so demos work on any day.
+  spots have no date range so demos work on any day. `ownerId` is the
+  account that listed it; seed spots have none, so only admins manage them.
 - **Booking**: `{ id, spotId, userName, date, startTime, hours, startMin,
   endMin, points, hostName, destinationLabel }`. Overlap is only checked against bookings
   with the same `date`. Bookings saved before dates existed are migrated to

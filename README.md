@@ -16,6 +16,38 @@ npm start
 # open http://localhost:3000
 ```
 
+On first start the server creates an `admin` account and prints its random
+password to the console once. To pick the password yourself (and reset it
+later), set `ADMIN_PASSWORD` (and optionally `ADMIN_USERNAME`) before
+starting:
+
+```powershell
+$env:ADMIN_PASSWORD = "choose-a-long-password"; npm start
+```
+
+## Accounts and roles
+
+Everyone signs in. Anyone can create a member account with "Create account";
+admins can't sign up.
+
+| Role              | Can use                                                        |
+| ----------------- | -------------------------------------------------------------- |
+| Member (`member`) | Find parking, book as themselves, and host: list spots and remove their own ("Find parking" and "Host a spot" tabs) |
+| Admin (`admin`)   | Everything, plus Live demo, Batch optimize, the full Hosts directory and points table, listing spots under any host name, removing any spot, and resetting demo data |
+
+Accounts created as "driver" or "host" by an earlier version become members
+on the next server start.
+
+The server enforces these rules on every API route; the UI just hides what a
+role can't use. Bookings always charge the signed-in member, so nobody can
+spend someone else's points. Display names must be unique, because points
+and spots are kept under that name.
+
+Sessions are signed, HttpOnly, `SameSite=Strict` cookies that last 7 days.
+Passwords are hashed with scrypt. After 10 failed sign-ins for a username
+from one IP, that pair is blocked for 15 minutes. Accounts are stored in
+`data/db.json` and survive "Reset demo data".
+
 Dev mode with auto-reload:
 
 ```bash
@@ -74,11 +106,12 @@ A spot can be booked for a date + time window only if:
 Bookings are single-day (they must end by midnight), can't be in the past, and
 can be made up to 365 days ahead. Dates are `YYYY-MM-DD` in the server's local
 time zone.
-- **Batch optimize** — drop several destinations and watch the Hungarian
+- **Batch optimize** (admin only) — drop several destinations and watch the Hungarian
   algorithm assign them all at once, with a side-by-side comparison against
   naive greedy matching (and how many meters it saves).
-- **Live demo** — watch requests stream in, collect in a batch window, and get
-  assigned and booked automatically, with an animated solver view.
+- **Live demo** (admin only) — watch requests stream in, collect in a batch
+  window, and get assigned and booked automatically, with an animated solver
+  view.
 
 ## Walking distance: along streets, not through buildings
 
@@ -118,16 +151,19 @@ match. The browser animates each batch:
 3. Every possible driver→spot pair is drawn (the cost matrix, also shown as a
    heatmap), then greedy's picks in red, then the Hungarian optimum in green.
 
-Two ways to drive it (both animate the same way in any open browser):
+The live demo is admin-only. Two ways to drive it (both animate the same way
+in any browser signed in as an admin):
 
 ```bash
-# Option A: in the app. Open the "Live demo" tab and click Start simulation.
+# Option A: in the app. Sign in as admin, open "Live demo", click Start simulation.
 
 # Option B: from a terminal, like real client apps calling the API.
-# The browser jumps to the Live demo tab when requests arrive.
+# The script signs in with ADMIN_USERNAME / ADMIN_PASSWORD (or --user / --password).
+# Admin browsers jump to the Live demo tab when requests arrive.
 npm run simulate                                    # scripted rush hour (recommended)
 npm run simulate -- --random --count 30 --speed fast
 npm run simulate -- --date 2026-10-25               # book for a specific date (default today)
+npm run simulate -- --password "the-admin-password" # if ADMIN_PASSWORD isn't set
 ```
 
 The **scripted rush hour** is a fixed set of 14 drivers in two waves, chosen
@@ -162,25 +198,32 @@ Core pieces:
 
 ## API
 
-| Method | Path               | Purpose                                   |
-| ------ | ------------------ | ----------------------------------------- |
-| GET    | `/api/spots`       | List spots (`?date=` only those offered that day) |
-| POST   | `/api/spots`       | Add a spot (host): daily hours + optional date range |
-| DELETE | `/api/spots/:id`   | Remove a spot                             |
-| GET    | `/api/hosts`       | Hosts directory (`?date=` that day's bookings + points) |
-| GET    | `/api/points`      | Points rules (welcome grant, points per hour) |
-| GET    | `/api/members`     | Every member's balance, earned, spent     |
-| GET    | `/api/members/:name` | One member's balance + recent history   |
-| POST   | `/api/assign`      | Instant assignment, nothing booked        |
-| POST   | `/api/book`        | Book a date + time window (driver pays the host in points) |
-| GET    | `/api/bookings`    | List bookings (`?date=`, `?spotId=`)      |
-| DELETE | `/api/bookings`    | Clear all bookings and points (keeps spots) |
-| POST   | `/api/reset`       | Reset demo data to the seed               |
-| POST   | `/api/requests`    | Queue request(s) for batched assignment   |
-| GET    | `/api/events`      | Server-Sent Events stream of the queue    |
-| GET    | `/api/live`        | Queue, stats, and simulator snapshot      |
-| POST   | `/api/simulate/start` | Start built-in simulator              |
-| POST   | `/api/simulate/stop`  | Stop the simulator                    |
+"Who" is the role needed. Without a session, protected routes return 401;
+with the wrong role, 403.
+
+| Method | Path               | Who          | Purpose                                   |
+| ------ | ------------------ | ------------ | ----------------------------------------- |
+| POST   | `/api/auth/register` | anyone     | Create a member account and sign in `{ username, password, displayName }` |
+| POST   | `/api/auth/login`  | anyone       | Sign in `{ username, password }`          |
+| POST   | `/api/auth/logout` | anyone       | Sign out                                  |
+| GET    | `/api/auth/me`     | anyone       | The signed-in account, or `{ user: null }` |
+| GET    | `/api/points`      | anyone       | Points rules (welcome grant, points per hour) |
+| GET    | `/api/spots`       | signed in    | List spots (`?date=` only those offered that day) |
+| POST   | `/api/spots`       | signed in    | Add a spot under your name: daily hours + optional date range |
+| DELETE | `/api/spots/:id`   | owner, admin | Remove a spot                             |
+| GET    | `/api/hosts`       | admin        | Hosts directory (`?date=` that day's bookings + points) |
+| GET    | `/api/members`     | admin        | Every member's balance, earned, spent     |
+| GET    | `/api/members/:name` | self, admin | One member's balance + recent history    |
+| POST   | `/api/assign`      | signed in    | Instant assignment, nothing booked (batches: admin only) |
+| POST   | `/api/book`        | signed in    | Book a date + time window as yourself (you pay the host in points) |
+| GET    | `/api/bookings`    | signed in    | Bookings you can see: your own, on your spots, or all for admins (`?date=`, `?spotId=`) |
+| DELETE | `/api/bookings`    | admin        | Clear all bookings and points (keeps spots) |
+| POST   | `/api/reset`       | admin        | Reset demo data to the seed               |
+| POST   | `/api/requests`    | admin        | Queue request(s) for batched assignment   |
+| GET    | `/api/events`      | admin        | Server-Sent Events stream of the queue    |
+| GET    | `/api/live`        | admin        | Queue, stats, and simulator snapshot      |
+| POST   | `/api/simulate/start` | admin     | Start built-in simulator                  |
+| POST   | `/api/simulate/stop`  | admin     | Stop the simulator                        |
 
 Example assignment request:
 
@@ -218,11 +261,14 @@ notes.
   public router is rate-limited (see above).
 - Requested coordinates are sent to the configured router. With the default
   public server that's a third party; self-host OSRM to keep them in-house.
-- Members are identified by the name they type (case-insensitive), so anyone
-  can spend another member's points by typing their name. Points need real
-  accounts before this is used beyond a demo.
+- Points are still kept under display names (case-insensitive), not account
+  ids. Sign-up refuses names already in use, but simulated drivers in the
+  live demo (e.g. "Alex B.") are created as members without accounts.
 - There are no cancellations yet, so points can't be refunded.
-- No authentication; names are free-text labels. Anyone who can reach the
-  server can queue requests, start/stop the simulator, or clear bookings.
+- Accounts can't be edited or deleted from the app, and there's no password
+  reset except the admin's (via `ADMIN_PASSWORD`). Signing out clears the
+  cookie but doesn't revoke a copied session token before it expires.
+- Serve over HTTPS outside local demos. The session cookie is only marked
+  `Secure` when Express sees an HTTPS request.
 - Within a batch each spot goes to at most one driver, even if two drivers'
   time windows don't overlap.

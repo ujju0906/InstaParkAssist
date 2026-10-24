@@ -21,16 +21,56 @@
           <p>Community parking: share your spot, earn points, park for free</p>
         </div>
       </div>
-      <nav class="tabs">
-        <button class="tab active" data-tab="find">Find parking</button>
-        <button class="tab" data-tab="host">Host a spot</button>
-        <button class="tab" data-tab="batch">Batch optimize</button>
-        <button class="tab" data-tab="hosts">Hosts</button>
-        <button class="tab" data-tab="live">Live demo</button>
+      <!-- data-roles: which account roles see the element (see applyRole() in app.js). -->
+      <nav class="tabs" hidden>
+        <button class="tab active" data-tab="find" data-roles="member admin">Find parking</button>
+        <button class="tab" data-tab="host" data-roles="member admin">Host a spot</button>
+        <button class="tab" data-tab="batch" data-roles="admin">Batch optimize</button>
+        <button class="tab" data-tab="hosts" data-roles="admin">Hosts</button>
+        <button class="tab" data-tab="live" data-roles="admin">Live demo</button>
       </nav>
+      <div class="account" id="account" hidden>
+        <span id="account-name"></span>
+        <span class="badge" id="account-role"></span>
+        <button id="logout-btn" class="ghost small">Sign out</button>
+      </div>
     </header>
 
-    <main class="layout">
+    <!-- SIGN IN / CREATE ACCOUNT -->
+    <main class="auth-screen" id="auth-screen" hidden>
+      <div class="auth-card">
+        <div class="auth-tabs" role="tablist">
+          <button class="tab active" id="auth-tab-login" role="tab" aria-selected="true">Sign in</button>
+          <button class="tab" id="auth-tab-register" role="tab" aria-selected="false">Create account</button>
+        </div>
+
+        <form id="login-form" novalidate>
+          <label for="login-username">Username</label>
+          <input id="login-username" type="text" autocomplete="username" required />
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" autocomplete="current-password" required />
+          <button type="submit" class="primary">Sign in</button>
+        </form>
+
+        <form id="register-form" novalidate hidden>
+          <p class="hint tight">One account to park and to share your own spot.</p>
+          <label for="reg-username">Username</label>
+          <input id="reg-username" type="text" autocomplete="username" placeholder="maria.g" required />
+          <p class="hint tight">3-32 characters: letters, numbers, ".", "_" or "-".</p>
+          <label for="reg-display">Display name</label>
+          <input id="reg-display" type="text" autocomplete="name" placeholder="Maria G." maxlength="40" />
+          <p class="hint tight">Shown to hosts and drivers. Your points are kept under this name.</p>
+          <label for="reg-password">Password</label>
+          <input id="reg-password" type="password" autocomplete="new-password" minlength="8" required />
+          <p class="hint tight">At least 8 characters.</p>
+          <button type="submit" class="primary">Create account</button>
+        </form>
+
+        <p class="err" id="auth-error" role="alert" hidden></p>
+      </div>
+    </main>
+
+    <main class="layout" id="app-layout" hidden>
       <section class="panel">
         <!-- FIND PARKING -->
         <div class="pane active" id="pane-find">
@@ -60,8 +100,6 @@
             </div>
           </div>
 
-          <label for="find-name">Your name</label>
-          <input id="find-name" type="text" placeholder="Alex" autocomplete="name" />
           <p class="hint tight" id="find-balance" aria-live="polite"></p>
 
           <button id="find-assign" class="primary">Find my spot</button>
@@ -87,8 +125,10 @@
           <label for="host-label">Spot name</label>
           <input id="host-label" type="text" placeholder="Driveway on Clay St" />
 
-          <label for="host-name">Host name</label>
-          <input id="host-name" type="text" placeholder="Maria G." />
+          <div data-roles="admin">
+            <label for="host-name">Host name</label>
+            <input id="host-name" type="text" placeholder="Leave blank to list under your name" />
+          </div>
 
           <p class="points-note">
             No prices, no money. Every spot earns its host the same
@@ -120,7 +160,7 @@
           <button id="host-add" class="primary">Publish spot</button>
           <p class="err" id="host-error" role="alert" hidden></p>
 
-          <h3>Live spots</h3>
+          <h3 id="host-list-title">Live spots</h3>
           <ul id="host-list" class="spot-list"></ul>
         </div>
 
@@ -249,7 +289,7 @@
 
       <section class="map-wrap">
         <div id="map"></div>
-        <div class="map-note">
+        <div class="map-note" data-roles="admin">
           <button id="reset-btn" class="ghost small">Reset demo data</button>
         </div>
       </section>

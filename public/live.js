@@ -14,6 +14,7 @@
  *
  * Relies on globals from app.js: map, liveLayer, esc, api, fmtMeters,
  * walkLabel, distanceNote, drawWalk, renderSpots, activateTab, mode, loadSpots.
+ * Admin only: the stream starts when app.js calls startLiveStream().
  */
 
 const live = {
@@ -331,48 +332,62 @@ function clearLive() {
 
 // --- Event stream ----------------------------------------------------------
 
-const stream = new EventSource('/api/events');
-const on = (type, fn) => stream.addEventListener(type, (e) => fn(JSON.parse(e.data)));
+let stream = null;
 
-on('hello', (s) => {
-  updateStats(s.stats);
-  updateSim(s.sim);
-  s.pending.forEach(addPending);
-  if (s.remainingMs) startWindow(s.remainingMs);
-});
+/** Connect to the live event stream. Admin only: app.js calls this after an admin signs in. */
+function startLiveStream() {
+  if (stream) return;
+  const es = new EventSource('/api/events');
+  stream = es;
+  const on = (type, fn) => es.addEventListener(type, (e) => fn(JSON.parse(e.data)));
+  // The browser gives up on a refused stream (e.g. the session expired); allow a fresh start.
+  es.addEventListener('error', () => {
+    if (es.readyState === EventSource.CLOSED && stream === es) stream = null;
+  });
+  wireLiveEvents(on);
+}
 
-on('request', (d) => {
-  if (mode !== 'live') activateTab('live');
-  addPending(d.request);
-  live.stat.received.textContent = d.stats.received;
-});
+function wireLiveEvents(on) {
+  on('hello', (s) => {
+    updateStats(s.stats);
+    updateSim(s.sim);
+    s.pending.forEach(addPending);
+    if (s.remainingMs) startWindow(s.remainingMs);
+  });
 
-on('window', (d) => startWindow(d.remainingMs));
+  on('request', (d) => {
+    if (mode !== 'live') activateTab('live');
+    addPending(d.request);
+    live.stat.received.textContent = d.stats.received;
+  });
 
-on('solving', (d) => {
-  clearInterval(windowTicker);
-  live.fill.style.transition = 'none';
-  live.fill.style.width = '100%';
-  live.windowText.textContent = `Batch of ${d.size} closed. Getting walking routes along streets…`;
-});
+  on('window', (d) => startWindow(d.remainingMs));
 
-on('batch', (b) => {
-  resetWindow();
-  const gen = generation;
-  animChain = animChain
-    .then(() => (gen === generation ? animateBatch(b) : null))
-    .catch((err) => console.error(err));
-});
+  on('solving', (d) => {
+    clearInterval(windowTicker);
+    live.fill.style.transition = 'none';
+    live.fill.style.width = '100%';
+    live.windowText.textContent = `Batch of ${d.size} closed. Getting walking routes along streets…`;
+  });
 
-on('sim', updateSim);
+  on('batch', (b) => {
+    resetWindow();
+    const gen = generation;
+    animChain = animChain
+      .then(() => (gen === generation ? animateBatch(b) : null))
+      .catch((err) => console.error(err));
+  });
 
-on('reset', () => {
-  // Abandon queued/in-flight animations and start from a clean slate.
-  generation += 1;
-  animChain = Promise.resolve();
-  clearLive();
-  loadSpots().catch(console.error);
-});
+  on('sim', updateSim);
+
+  on('reset', () => {
+    // Abandon queued/in-flight animations and start from a clean slate.
+    generation += 1;
+    animChain = Promise.resolve();
+    clearLive();
+    loadSpots().catch(console.error);
+  });
+}
 
 // --- Controls --------------------------------------------------------------
 

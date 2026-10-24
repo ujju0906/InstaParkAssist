@@ -716,6 +716,47 @@ table.matrix {
   }
 }
 
+/* --- Accounts ------------------------------------------------------------ */
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.account .badge {
+  margin-left: 0;
+  text-transform: capitalize;
+}
+
+.auth-screen {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.auth-tabs .tab {
+  flex: 1;
+}
+
 /* Make the hidden attribute win over display rules like .row { display: flex }. */
 [hidden] {
   display: none !important;

@@ -61,6 +61,11 @@
 - Env: `PORT` (3000), `BATCH_WINDOW_MS` (5000), `BATCH_MAX` (8). The scripted
   rush scenario in `src/demoData.js` was tuned for the default batch size and
   the stock seed spots; re-tune it if either changes.
+- Auth env: `ADMIN_USERNAME` (`admin`), `ADMIN_PASSWORD` (creates the admin
+  or resets its password at startup; without it, a missing admin is created
+  with a random password printed once), `SESSION_SECRET` (else generated and
+  kept in `data/db.json`). `npm run simulate` signs in with the same
+  `ADMIN_USERNAME`/`ADMIN_PASSWORD` or `--user`/`--password`.
 - Routing env: `OSRM_URL` (default public FOSSGIS foot server; self-host for
   production), `OSRM_PROFILE` (`foot`), `OSRM_TIMEOUT_MS`,
   `OSRM_MIN_INTERVAL_MS`, `ROUTING=off` (cache + estimates only).
@@ -86,3 +91,6 @@
   member across a batch) before solving.
 - Prefer adding new API routes in `server.js` and keeping business logic in
   `src/`.
+- Auth uses only `node:crypto`: scrypt password hashes, HMAC-signed
+  stateless session cookies (`ipa_session`, HttpOnly, `SameSite=Strict`,
+  7 days). Don't add auth dependencies without a reason.

@@ -13,14 +13,27 @@ destination (users).
 - **Users** — drivers heading to a specific building/address who want the
   closest available spot for a chosen number of hours, without manually
   comparing listings.
+- **Admins** — run the demo: Live demo, Batch optimize, the full Hosts
+  directory and points table, and data resets.
+
+## Accounts and roles
+
+Everyone signs in. There are two roles: `member` and `admin`. Every member
+can both park and host (one person is often both, which is the point of the
+points system). Sign-ups are always members; admins are created by the
+server (`ADMIN_PASSWORD` / printed random password), never through sign-up.
+Members get exactly three things: find parking, book it, and host spots
+(they see and remove only their own). Everything else (Live demo, Batch
+optimize, Hosts directory, points table, resets) is admin-only. Bookings always charge the signed-in
+member. The server enforces every rule; hiding UI is only cosmetic.
 
 ## Host experience
 
 - Hosts place a spot by searching its address (same geocoder as the driver
   search) or by clicking the map, then set availability (no price).
-- The **Hosts** tab is a directory of every host, their spots, booking counts,
-  and points earned, plus every member's points balance. Hosts are grouped by
-  name until accounts exist.
+- The **Hosts** tab (admin only) is a directory of every host, their spots,
+  booking counts, and points earned, plus every member's points balance.
+  Members manage their own spots from the list on "Host a spot".
 
 ## Non-profit: community points, not money
 
@@ -91,7 +104,8 @@ in-app simulator or `npm run simulate`.
 
 - Money of any kind: no prices, payments, payouts, or buying points.
 - Cancellations/refunds (not built yet).
-- No user accounts/auth yet; names are free-text labels.
+- Account management: editing or deleting accounts, password reset (except
+  the admin via `ADMIN_PASSWORD`), OAuth/SSO.
 - Walking routes don't model building entrances, private gates, elevation, or
   accessibility needs (e.g. step-free routes); they come from OpenStreetMap's
   walkable network as-is.

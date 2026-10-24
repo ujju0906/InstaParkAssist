@@ -10,16 +10,30 @@
  *   npm run simulate -- --random --count 30 --speed fast
  *   npm run simulate -- --clear               # clear existing bookings first
  *   npm run simulate -- --url http://localhost:4000
+ *
+ * The live API is admin-only, so the script signs in first. Credentials come
+ * from --user/--password, or the ADMIN_USERNAME (default "admin") and
+ * ADMIN_PASSWORD env vars the server uses.
  */
 
 import { buildPlan, SPEEDS } from '../src/demoData.js';
 import { isValidDate, todayISO } from '../src/dates.js';
 
 const USAGE =
-  'Usage: npm run simulate -- [--random] [--date YYYY-MM-DD] [--count N] [--speed slow|normal|fast] [--clear] [--url URL]';
+  'Usage: npm run simulate -- [--random] [--date YYYY-MM-DD] [--count N] [--speed slow|normal|fast] [--clear] [--url URL]\n' +
+  '                           [--user ADMIN_USERNAME] [--password ADMIN_PASSWORD]';
 
 function parseArgs(argv) {
-  const args = { scenario: 'rush', count: 16, speed: 'normal', url: 'http://localhost:3000', clear: false, date: undefined };
+  const args = {
+    scenario: 'rush',
+    count: 16,
+    speed: 'normal',
+    url: 'http://localhost:3000',
+    clear: false,
+    date: undefined,
+    user: process.env.ADMIN_USERNAME || 'admin',
+    password: process.env.ADMIN_PASSWORD,
+  };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
     if (key === '--random') args.scenario = 'random';
@@ -30,6 +44,8 @@ function parseArgs(argv) {
     else if (key === '--speed') args.speed = SPEEDS[argv[++i]] ? argv[i] : 'normal';
     else if (key === '--url') args.url = String(argv[++i] || '').replace(/\/$/, '');
     else if (key === '--clear') args.clear = true;
+    else if (key === '--user') args.user = argv[++i];
+    else if (key === '--password') args.password = argv[++i];
     else if (key === '--help' || key === '-h') {
       console.log(USAGE);
       process.exit(0);
@@ -44,6 +60,10 @@ function parseArgs(argv) {
     console.error(`--date must be today or later, as YYYY-MM-DD (got "${args.date}")`);
     process.exit(1);
   }
+  if (!args.password) {
+    console.error('The live demo is admin-only. Set ADMIN_PASSWORD or pass --password (and --user if not "admin").');
+    process.exit(1);
+  }
   // The scripted scenario is tuned for an empty booking table.
   if (args.scenario === 'rush') args.clear = true;
   return args;
@@ -51,9 +71,39 @@ function parseArgs(argv) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** Session cookie from signIn(), sent on every request. */
+let cookie = '';
+const authed = (opts = {}) => ({ ...opts, headers: { ...opts.headers, Cookie: cookie } });
+
+/** Sign in as admin. Returns false if the server can't be reached. */
+async function signIn(base, user, password) {
+  let res;
+  try {
+    res = await fetch(`${base}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user, password }),
+    });
+  } catch {
+    return false;
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error(`Sign-in as "${user}" failed: ${body.error || res.status}`);
+    process.exit(1);
+  }
+  if (body.user?.role !== 'admin') {
+    console.error(`"${user}" is not an admin account; the live demo needs one.`);
+    process.exit(1);
+  }
+  const setCookie = res.headers.getSetCookie?.() ?? [res.headers.get('set-cookie') ?? ''];
+  cookie = setCookie.map((c) => c.split(';')[0]).filter(Boolean).join('; ');
+  return true;
+}
+
 /** Minimal Server-Sent Events reader on top of fetch (no dependencies). */
 async function listen(url, onEvent, signal) {
-  const res = await fetch(url, { signal });
+  const res = await fetch(url, authed({ signal }));
   const decoder = new TextDecoder();
   let buf = '';
   for await (const chunk of res.body) {
@@ -77,16 +127,19 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const base = args.url;
 
-  const live = await fetch(`${base}/api/live`)
-    .then((r) => r.json())
-    .catch(() => null);
+  const reachable = await signIn(base, args.user, args.password);
+  const live = reachable
+    ? await fetch(`${base}/api/live`, authed())
+        .then((r) => r.json())
+        .catch(() => null)
+    : null;
   if (!live) {
     console.error(`Can't reach ${base}. Start the server first with: npm start`);
     process.exit(1);
   }
 
   if (args.clear) {
-    await fetch(`${base}/api/bookings`, { method: 'DELETE' });
+    await fetch(`${base}/api/bookings`, authed({ method: 'DELETE' }));
     console.log('Cleared existing bookings.');
   }
 
@@ -142,11 +195,14 @@ async function main() {
 
   for (const { delay, request: req } of plan) {
     await sleep(delay);
-    const res = await fetch(`${base}/api/requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
-    });
+    const res = await fetch(
+      `${base}/api/requests`,
+      authed({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      })
+    );
     const body = await res.json();
     if (!res.ok) {
       // Same validation error (e.g. a bad --date) would hit every request; stop early.
@@ -167,7 +223,7 @@ async function main() {
   await Promise.race([allSolved, sleep(live.windowMs + 35000)]);
   controller.abort();
 
-  const stats = (await fetch(`${base}/api/live`).then((r) => r.json())).stats;
+  const stats = (await fetch(`${base}/api/live`, authed()).then((r) => r.json())).stats;
   console.log(
     `Done. ${stats.received} requests, ${stats.assigned} parked, ${stats.unassigned} without a spot, ` +
       `${stats.batches} batches, ${stats.metersSaved} m walking saved vs greedy.`

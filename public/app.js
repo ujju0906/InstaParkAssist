@@ -74,11 +74,38 @@ async function api(path, opts) {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
   });
+  // Session expired or signed out elsewhere: back to the sign-in screen.
+  if (res.status === 401 && !path.startsWith('/api/auth/')) {
+    location.reload();
+    throw new Error('Please sign in again.');
+  }
   if (!res.ok && res.status !== 204) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Request failed (${res.status})`);
   }
   return res.status === 204 ? null : res.json();
+}
+
+// --- Account ---------------------------------------------------------------
+
+/** The signed-in account: { id, username, displayName, role }. Set at boot. */
+let me = null;
+const isAdmin = () => me?.role === 'admin';
+
+/** Two roles: "admin", and "member" for everyone else (also covers pre-merge "user"/"host" accounts). */
+const uiRole = () => (me?.role === 'admin' ? 'admin' : 'member');
+
+/** Show only the elements whose data-roles include this role. */
+function applyRole(role) {
+  document.querySelectorAll('[data-roles]').forEach((el) => {
+    el.hidden = !el.dataset.roles.split(' ').includes(role);
+  });
+  document.getElementById('host-list-title').textContent = role === 'admin' ? 'Live spots' : 'Your spots';
+}
+
+function canOpenTab(name) {
+  const tab = document.querySelector(`.tabs .tab[data-tab="${name}"]`);
+  return Boolean(tab && me && tab.dataset.roles.split(' ').includes(uiRole()));
 }
 
 async function loadSpots() {
@@ -157,22 +184,18 @@ async function loadPointsRules() {
   document.querySelectorAll('.rule-welcome').forEach((el) => (el.textContent = pointsRules.welcomePoints));
 }
 
-/** Show the driver's balance under the name field as they type. */
-let balanceTimer = null;
-function showFindBalance() {
-  clearTimeout(balanceTimer);
-  balanceTimer = setTimeout(async () => {
-    const name = document.getElementById('find-name').value.trim() || 'You';
-    const el = document.getElementById('find-balance');
-    try {
-      const m = await api(`/api/members/${encodeURIComponent(name)}`);
-      el.textContent = m.isNew
-        ? `${name} is new: you'll start with ${pts(m.balance)}.`
-        : `${m.name} has ${pts(m.balance)} (${m.earned} earned hosting, ${m.spent} spent parking).`;
-    } catch {
-      el.textContent = '';
-    }
-  }, 250);
+/** Show the signed-in member's balance on the Find tab. */
+async function showFindBalance() {
+  const el = document.getElementById('find-balance');
+  if (!me) return;
+  try {
+    const m = await api(`/api/members/${encodeURIComponent(me.displayName)}`);
+    el.textContent = m.isNew
+      ? `Booking as ${me.displayName}. You'll start with ${pts(m.balance)}.`
+      : `Booking as ${m.name}: ${pts(m.balance)} (${m.earned} earned hosting, ${m.spent} spent parking).`;
+  } catch {
+    el.textContent = '';
+  }
 }
 
 // --- Dates -----------------------------------------------------------------
@@ -273,8 +296,9 @@ function wireSearch(inputId, buttonId, statusId, onFound) {
 // --- Tabs ------------------------------------------------------------------
 
 function activateTab(name) {
+  if (!canOpenTab(name)) return;
   if (name === mode && document.getElementById(`pane-${name}`).classList.contains('active')) return;
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tabs .tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.pane').forEach((p) => p.classList.remove('active'));
   mode = name;
   document.getElementById(`pane-${mode}`).classList.add('active');
@@ -291,7 +315,7 @@ function activateTab(name) {
   if (mode === 'hosts') loadHosts();
 }
 
-document.querySelectorAll('.tab').forEach((tab) => {
+document.querySelectorAll('.tabs .tab').forEach((tab) => {
   tab.addEventListener('click', () => activateTab(tab.dataset.tab));
 });
 
@@ -336,14 +360,15 @@ document.getElementById('find-assign').addEventListener('click', async () => {
   const hours = +document.getElementById('find-hours').value || 1;
   const date = document.getElementById('find-date').value || todayISO();
   const startTime = document.getElementById('find-start').value || '09:00';
-  const userName = document.getElementById('find-name').value.trim() || 'You';
+  // The server books and charges the signed-in member; this is for display.
+  const userName = me.displayName;
 
   resultEl.innerHTML = `<p class="hint">Finding the spot with the shortest walk…</p>`;
   try {
     const data = await api('/api/assign', {
       method: 'POST',
       body: JSON.stringify({
-        requests: [{ userName, lat: findDest.lat, lng: findDest.lng, label: findDest.label, date, startTime, hours }],
+        requests: [{ lat: findDest.lat, lng: findDest.lng, label: findDest.label, date, startTime, hours }],
       }),
     });
 
@@ -383,7 +408,6 @@ document.getElementById('find-assign').addEventListener('click', async () => {
           method: 'POST',
           body: JSON.stringify({
             spotId: a.spot.id,
-            userName,
             date,
             startTime,
             hours,
@@ -433,7 +457,8 @@ document.getElementById('host-add').addEventListener('click', async () => {
   }
   const payload = {
     label: document.getElementById('host-label').value.trim(),
-    hostName: document.getElementById('host-name').value.trim(),
+    // Members always list under their own name (the server enforces this).
+    hostName: isAdmin() ? document.getElementById('host-name').value.trim() : '',
     lat: hostSpot.lat,
     lng: hostSpot.lng,
     availableFrom: document.getElementById('host-from').value || '00:00',
@@ -456,10 +481,16 @@ document.getElementById('host-add').addEventListener('click', async () => {
   }
 });
 
+/** Admins manage every spot; members only the ones their account listed. */
 function renderHostList() {
   const ul = document.getElementById('host-list');
   ul.innerHTML = '';
-  spots.forEach((s) => {
+  const mine = isAdmin() ? spots : spots.filter((s) => me && s.ownerId === me.id);
+  if (!mine.length) {
+    ul.innerHTML = `<li><span class="sub">No spots yet. Publish one above.</span></li>`;
+    return;
+  }
+  mine.forEach((s) => {
     const li = document.createElement('li');
     li.innerHTML = `<span>${esc(s.label)} · ${esc(s.hostName)}<br>
       <span class="sub">${esc(fmtDateRange(s))} · ${esc(s.availableFrom)}–${esc(s.availableUntil)}</span></span>`;
@@ -469,8 +500,12 @@ function renderHostList() {
     del.title = 'Remove spot';
     del.setAttribute('aria-label', `Remove ${s.label}`);
     del.addEventListener('click', async () => {
-      await api(`/api/spots/${s.id}`, { method: 'DELETE' });
-      await loadSpots();
+      try {
+        await api(`/api/spots/${encodeURIComponent(s.id)}`, { method: 'DELETE' });
+        await loadSpots();
+      } catch (err) {
+        alert(err.message);
+      }
     });
     li.appendChild(del);
     li.addEventListener('mouseenter', () => map.setView([s.lat, s.lng], 16));
@@ -706,15 +741,114 @@ document.getElementById('reset-btn').addEventListener('click', async () => {
   await loadSpots();
 });
 
+// --- Sign in / create account ----------------------------------------------
+
+const authEl = {
+  screen: document.getElementById('auth-screen'),
+  loginTab: document.getElementById('auth-tab-login'),
+  registerTab: document.getElementById('auth-tab-register'),
+  loginForm: document.getElementById('login-form'),
+  registerForm: document.getElementById('register-form'),
+  error: document.getElementById('auth-error'),
+};
+
+function showAuthError(msg) {
+  authEl.error.textContent = msg;
+  authEl.error.hidden = !msg;
+}
+
+function showAuthForm(which) {
+  const login = which === 'login';
+  authEl.loginForm.hidden = !login;
+  authEl.registerForm.hidden = login;
+  authEl.loginTab.classList.toggle('active', login);
+  authEl.registerTab.classList.toggle('active', !login);
+  authEl.loginTab.setAttribute('aria-selected', String(login));
+  authEl.registerTab.setAttribute('aria-selected', String(!login));
+  showAuthError('');
+  document.getElementById(login ? 'login-username' : 'reg-username').focus();
+}
+
+authEl.loginTab.addEventListener('click', () => showAuthForm('login'));
+authEl.registerTab.addEventListener('click', () => showAuthForm('register'));
+
+async function submitAuth(form, path, body) {
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  showAuthError('');
+  try {
+    const { user } = await api(path, { method: 'POST', body: JSON.stringify(body) });
+    await startApp(user);
+  } catch (err) {
+    showAuthError(err.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+authEl.loginForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  submitAuth(authEl.loginForm, '/api/auth/login', {
+    username: document.getElementById('login-username').value,
+    password: document.getElementById('login-password').value,
+  });
+});
+
+authEl.registerForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  submitAuth(authEl.registerForm, '/api/auth/register', {
+    username: document.getElementById('reg-username').value,
+    displayName: document.getElementById('reg-display').value,
+    password: document.getElementById('reg-password').value,
+  });
+});
+
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  // A fresh page drops every bit of the previous account's state.
+  location.reload();
+});
+
+function showSignIn() {
+  document.getElementById('app-layout').hidden = true;
+  document.querySelector('.tabs').hidden = true;
+  document.getElementById('account').hidden = true;
+  authEl.screen.hidden = false;
+  showAuthForm('login');
+}
+
 // --- Boot ------------------------------------------------------------------
 
-document.getElementById('find-name').addEventListener('input', showFindBalance);
+async function startApp(user) {
+  me = user;
+  applyRole(uiRole());
+  document.getElementById('account-name').textContent = me.displayName;
+  document.getElementById('account-role').textContent = uiRole();
+  authEl.screen.hidden = true;
+  document.querySelector('.tabs').hidden = false;
+  document.getElementById('account').hidden = false;
+  document.getElementById('app-layout').hidden = false;
+  // The map was created while hidden; let Leaflet measure its container now.
+  map.invalidateSize();
+  activateTab('find');
 
-loadPointsRules()
-  .catch((err) => console.error('Could not load points rules:', err))
-  .then(() => loadSpots())
-  .then(() => showFindBalance())
-  .catch((err) => {
+  // Live demo stream (live.js) is admin-only; the server refuses it for others.
+  if (isAdmin()) startLiveStream();
+
+  try {
+    await loadPointsRules().catch((err) => console.error('Could not load points rules:', err));
+    await loadSpots();
+    await showFindBalance();
+  } catch (err) {
     console.error(err);
     alert('Could not load spots: ' + err.message);
+  }
+}
+
+api('/api/auth/me')
+  .then(({ user }) => (user ? startApp(user) : showSignIn()))
+  .catch((err) => {
+    console.error(err);
+    showSignIn();
+    showAuthError('Could not reach the server. Try reloading.');
   });
