@@ -1,0 +1,6 @@
+node_modules/
+.npm-cache/
+data/db.json
+data/route-cache.json
+*.log
+.DS_Store

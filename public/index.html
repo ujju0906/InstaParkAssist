@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Instant Park Assist</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">P</span>
+        <div>
+          <h1>Instant Park Assist</h1>
+          <p>Airbnb for parking — auto-matched to your destination</p>
+        </div>
+      </div>
+      <nav class="tabs">
+        <button class="tab active" data-tab="find">Find parking</button>
+        <button class="tab" data-tab="host">Host a spot</button>
+        <button class="tab" data-tab="batch">Batch optimize</button>
+        <button class="tab" data-tab="hosts">Hosts</button>
+        <button class="tab" data-tab="live">Live demo</button>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <!-- FIND PARKING -->
+        <div class="pane active" id="pane-find">
+          <h2>Where are you headed?</h2>
+          <p class="hint">
+            Search an address or click the map to drop your destination. We'll
+            assign the nearest available spot.
+          </p>
+
+          <label>Destination</label>
+          <div class="row">
+            <input id="find-search" type="text" placeholder="e.g. 101 California St, SF" />
+            <button id="find-search-btn" class="ghost">Search</button>
+          </div>
+          <p class="coords" id="find-coords">No destination set</p>
+
+          <label for="find-date">Date</label>
+          <input id="find-date" type="date" />
+          <div class="row">
+            <div class="field">
+              <label for="find-start">Arrive at</label>
+              <input id="find-start" type="time" value="09:00" />
+            </div>
+            <div class="field">
+              <label>Hours</label>
+              <input id="find-hours" type="number" min="0.5" step="0.5" value="2" />
+            </div>
+          </div>
+
+          <label>Your name (optional)</label>
+          <input id="find-name" type="text" placeholder="Alex" />
+
+          <button id="find-assign" class="primary">Find my spot</button>
+
+          <div id="find-result" class="result"></div>
+        </div>
+
+        <!-- HOST A SPOT -->
+        <div class="pane" id="pane-host">
+          <h2>List your parking spot</h2>
+          <p class="hint">
+            Search your spot's address or click the map to place it, then fill in
+            the details.
+          </p>
+
+          <label for="host-search">Spot address</label>
+          <div class="row">
+            <input id="host-search" type="text" placeholder="e.g. 500 Pine St, SF" />
+            <button id="host-search-btn" class="ghost">Search</button>
+          </div>
+          <p class="coords" id="host-coords">Search an address or click the map to set location</p>
+
+          <label for="host-label">Spot name</label>
+          <input id="host-label" type="text" placeholder="Driveway on Clay St" />
+
+          <label for="host-name">Host name</label>
+          <input id="host-name" type="text" placeholder="Maria G." />
+
+          <div class="row">
+            <div class="field">
+              <label>Price / hour ($)</label>
+              <input id="host-price" type="number" min="0" step="0.25" value="5" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="host-from-date">Available from (date)</label>
+              <input id="host-from-date" type="date" />
+            </div>
+            <div class="field">
+              <label for="host-until-date">Until (date)</label>
+              <input id="host-until-date" type="date" />
+            </div>
+          </div>
+          <p class="hint tight">Leave "Until" blank to keep the spot listed with no end date.</p>
+          <div class="row">
+            <div class="field">
+              <label for="host-from">Daily hours from</label>
+              <input id="host-from" type="time" value="08:00" />
+            </div>
+            <div class="field">
+              <label for="host-until">Daily hours until</label>
+              <input id="host-until" type="time" value="20:00" />
+            </div>
+          </div>
+
+          <button id="host-add" class="primary">Publish spot</button>
+          <p class="err" id="host-error" role="alert" hidden></p>
+
+          <h3>Live spots</h3>
+          <ul id="host-list" class="spot-list"></ul>
+        </div>
+
+        <!-- BATCH OPTIMIZE -->
+        <div class="pane" id="pane-batch">
+          <h2>Batch optimization</h2>
+          <p class="hint">
+            Add several destinations and let the Hungarian algorithm assign them
+            all at once to minimize <em>total</em> walking distance. Compare it
+            against naive greedy matching.
+          </p>
+
+          <div class="row">
+            <input id="batch-name" type="text" placeholder="Destination label" />
+            <button id="batch-add" class="ghost">Add destination (then click map)</button>
+          </div>
+          <p class="hint" id="batch-help">
+            Click "Add destination", then click the map to drop it.
+          </p>
+
+          <ul id="batch-list" class="spot-list"></ul>
+
+          <label for="batch-date">Date</label>
+          <input id="batch-date" type="date" />
+          <div class="row">
+            <div class="field">
+              <label for="batch-start">Arrive at</label>
+              <input id="batch-start" type="time" value="09:00" />
+            </div>
+            <div class="field">
+              <label>Hours</label>
+              <input id="batch-hours" type="number" min="0.5" step="0.5" value="2" />
+            </div>
+          </div>
+
+          <button id="batch-run" class="primary">Optimize assignment</button>
+          <button id="batch-clear" class="ghost">Clear</button>
+
+          <div id="batch-result" class="result"></div>
+        </div>
+
+        <!-- HOSTS DIRECTORY -->
+        <div class="pane" id="pane-hosts">
+          <h2>All hosts</h2>
+          <p class="hint">
+            Everyone renting out a spot, with their listings and bookings. Click a
+            spot to see it on the map. Pick a date to see who's booked that day.
+          </p>
+          <label for="hosts-date">Filter by date</label>
+          <div class="row">
+            <input id="hosts-date" type="date" />
+            <button id="hosts-date-clear" class="ghost">All dates</button>
+          </div>
+          <p class="hint tight" id="hosts-date-note">Showing all dates.</p>
+          <div id="hosts-list"></div>
+        </div>
+
+        <!-- LIVE BATCHING DEMO -->
+        <div class="pane" id="pane-live">
+          <h2>Live batching demo</h2>
+          <p class="hint">
+            Simulated drivers send parking requests. Requests collect for a few
+            seconds, then the Hungarian algorithm assigns the whole batch at once
+            and books every spot.
+          </p>
+
+          <label for="live-scenario">Scenario</label>
+          <select id="live-scenario">
+            <option value="rush" selected>Scripted rush hour (14 drivers, best for demos)</option>
+            <option value="random">Random traffic</option>
+          </select>
+
+          <label for="live-date">Booking date</label>
+          <input id="live-date" type="date" />
+
+          <div class="row" id="live-random-opts" hidden>
+            <div class="field">
+              <label for="live-count">Drivers</label>
+              <input id="live-count" type="number" min="1" max="100" value="16" />
+            </div>
+            <div class="field">
+              <label for="live-speed">Arrival speed</label>
+              <select id="live-speed">
+                <option value="slow">Slow</option>
+                <option value="normal" selected>Normal</option>
+                <option value="fast">Fast</option>
+              </select>
+            </div>
+          </div>
+          <label class="check">
+            <input id="live-clear" type="checkbox" checked />
+            Clear existing bookings first (all dates)
+          </label>
+          <div class="btn-row">
+            <button id="live-start" class="primary">Start simulation</button>
+            <button id="live-stop" class="ghost">Stop</button>
+          </div>
+
+          <div class="stats">
+            <div class="stat"><div class="num" id="stat-received">0</div><div class="lbl">Requests</div></div>
+            <div class="stat"><div class="num" id="stat-assigned">0</div><div class="lbl">Parked</div></div>
+            <div class="stat"><div class="num" id="stat-batches">0</div><div class="lbl">Batches</div></div>
+            <div class="stat"><div class="num" id="stat-saved">0 m</div><div class="lbl">Walk saved vs greedy</div></div>
+          </div>
+
+          <h3>Incoming queue</h3>
+          <div class="window-bar" aria-hidden="true"><div id="live-window-fill"></div></div>
+          <p class="hint tight" id="live-window-text">Waiting for requests…</p>
+          <ul id="live-queue" class="spot-list"></ul>
+
+          <h3>Solver</h3>
+          <div class="phase" id="live-phase" aria-live="polite">Idle. Start a simulation or run <code>npm run simulate</code>.</div>
+          <div class="matrix-wrap" id="live-matrix"></div>
+
+          <h3>Batch log</h3>
+          <div id="live-log"></div>
+        </div>
+      </section>
+
+      <section class="map-wrap">
+        <div id="map"></div>
+        <div class="map-note">
+          <button id="reset-btn" class="ghost small">Reset demo data</button>
+        </div>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="app.js"></script>
+    <script src="live.js"></script>
+  </body>
+</html>

@@ -1,0 +1,202 @@
+{
+  "spots": [
+    {
+      "id": "seed-1",
+      "hostName": "Maria G.",
+      "label": "Driveway on Clay St",
+      "lat": 37.7946,
+      "lng": -122.4006,
+      "pricePerHour": 4.5,
+      "availableFrom": "07:00",
+      "availableUntil": "21:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-2",
+      "hostName": "Dmitri P.",
+      "label": "Covered garage, Sansome St",
+      "lat": 37.7961,
+      "lng": -122.4015,
+      "pricePerHour": 6.0,
+      "availableFrom": "00:00",
+      "availableUntil": "23:59",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-3",
+      "hostName": "Aisha K.",
+      "label": "Spot behind Montgomery BART",
+      "lat": 37.7892,
+      "lng": -122.4018,
+      "pricePerHour": 5.25,
+      "availableFrom": "06:00",
+      "availableUntil": "20:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-4",
+      "hostName": "Tom R.",
+      "label": "Pine St parking pad",
+      "lat": 37.7908,
+      "lng": -122.3985,
+      "pricePerHour": 3.75,
+      "availableFrom": "08:00",
+      "availableUntil": "18:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-5",
+      "hostName": "Lena W.",
+      "label": "Battery St rooftop stall",
+      "lat": 37.7975,
+      "lng": -122.3998,
+      "pricePerHour": 5.0,
+      "availableFrom": "07:30",
+      "availableUntil": "22:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-6",
+      "hostName": "Carlos M.",
+      "label": "Front St curb cut",
+      "lat": 37.7931,
+      "lng": -122.3972,
+      "pricePerHour": 4.0,
+      "availableFrom": "09:00",
+      "availableUntil": "19:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-7",
+      "hostName": "Priya S.",
+      "label": "Bush St tandem spot",
+      "lat": 37.7916,
+      "lng": -122.4035,
+      "pricePerHour": 4.75,
+      "availableFrom": "06:30",
+      "availableUntil": "21:30",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-8",
+      "hostName": "Evan T.",
+      "label": "Davis St secured lot",
+      "lat": 37.7955,
+      "lng": -122.3969,
+      "pricePerHour": 6.5,
+      "availableFrom": "00:00",
+      "availableUntil": "23:59",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-9",
+      "hostName": "Grace L.",
+      "label": "Mission St garage stall",
+      "lat": 37.7895,
+      "lng": -122.396,
+      "pricePerHour": 7.0,
+      "availableFrom": "06:00",
+      "availableUntil": "22:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-10",
+      "hostName": "Omar H.",
+      "label": "Fremont St driveway",
+      "lat": 37.7905,
+      "lng": -122.3952,
+      "pricePerHour": 4.25,
+      "availableFrom": "07:00",
+      "availableUntil": "19:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-11",
+      "hostName": "Sofia R.",
+      "label": "Embarcadero Center level 2",
+      "lat": 37.795,
+      "lng": -122.3962,
+      "pricePerHour": 6.75,
+      "availableFrom": "00:00",
+      "availableUntil": "23:59",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-12",
+      "hostName": "Ben A.",
+      "label": "Drumm St tandem spot",
+      "lat": 37.7942,
+      "lng": -122.3958,
+      "pricePerHour": 5.5,
+      "availableFrom": "07:00",
+      "availableUntil": "21:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-13",
+      "hostName": "Hana Y.",
+      "label": "Kearny St carport",
+      "lat": 37.794,
+      "lng": -122.4045,
+      "pricePerHour": 4.0,
+      "availableFrom": "08:00",
+      "availableUntil": "20:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-14",
+      "hostName": "Maria G.",
+      "label": "California St alley spot",
+      "lat": 37.7925,
+      "lng": -122.401,
+      "pricePerHour": 5.0,
+      "availableFrom": "07:00",
+      "availableUntil": "20:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-15",
+      "hostName": "Dmitri P.",
+      "label": "Steuart St lot",
+      "lat": 37.793,
+      "lng": -122.3935,
+      "pricePerHour": 6.0,
+      "availableFrom": "06:00",
+      "availableUntil": "23:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-16",
+      "hostName": "Nina F.",
+      "label": "Spear St driveway",
+      "lat": 37.7912,
+      "lng": -122.393,
+      "pricePerHour": 4.5,
+      "availableFrom": "07:00",
+      "availableUntil": "19:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-17",
+      "hostName": "Raj V.",
+      "label": "Beale St stall",
+      "lat": 37.7893,
+      "lng": -122.3938,
+      "pricePerHour": 5.25,
+      "availableFrom": "06:00",
+      "availableUntil": "21:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "seed-18",
+      "hostName": "Lena W.",
+      "label": "Columbus Ave garage",
+      "lat": 37.7967,
+      "lng": -122.404,
+      "pricePerHour": 5.0,
+      "availableFrom": "07:00",
+      "availableUntil": "22:00",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

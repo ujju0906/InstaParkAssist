@@ -1,0 +1,26 @@
+{
+  "name": "instant-park-assist",
+  "version": "1.0.0",
+  "description": "Airbnb-for-parking: hosts list spots, users get auto-assigned the nearest spot using the Hungarian algorithm to minimize walking distance.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "simulate": "node scripts/simulate.js",
+    "tune-rush": "node scripts/tune-rush.js",
+    "warm-routes": "node scripts/warm-routes.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "parking",
+    "hungarian-algorithm",
+    "assignment-problem",
+    "leaflet",
+    "express"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
