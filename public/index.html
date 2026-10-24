@@ -30,9 +30,25 @@
         <button class="tab" data-tab="live" data-roles="admin">Live demo</button>
       </nav>
       <div class="account" id="account" hidden>
-        <span id="account-name"></span>
+        <button id="profile-btn" class="profile-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="profile-panel">
+          <span id="account-name"></span>
+          <span class="points-pill" id="account-points">… pts</span>
+        </button>
         <span class="badge" id="account-role"></span>
         <button id="logout-btn" class="ghost small">Sign out</button>
+
+        <!-- PROFILE: points balance and history (filled by loadProfile() in app.js) -->
+        <div class="profile-panel" id="profile-panel" role="dialog" aria-labelledby="profile-name" hidden>
+          <div class="big" id="profile-name"></div>
+          <div class="sub" id="profile-username"></div>
+          <div class="profile-stats">
+            <div class="stat"><div class="num" id="profile-balance">0</div><div class="lbl">Balance</div></div>
+            <div class="stat"><div class="num" id="profile-earned">0</div><div class="lbl">Earned hosting</div></div>
+            <div class="stat"><div class="num" id="profile-spent">0</div><div class="lbl">Spent parking</div></div>
+          </div>
+          <h3>Recent activity</h3>
+          <ul class="spot-list profile-history" id="profile-history"></ul>
+        </div>
       </div>
     </header>
 

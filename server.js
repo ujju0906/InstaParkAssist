@@ -386,7 +386,24 @@ app.get('/api/members/:name', signedIn, (req, res) => {
   if (!isAdmin(req) && memberKey(name) !== memberKey(req.user.displayName)) {
     return res.status(403).json({ error: 'you can only see your own points' });
   }
-  res.json(getMember(name));
+  const member = getMember(name);
+  // Add what each entry was for, so the profile can say "Parked at X" / "Y parked at X".
+  const byId = new Map(getBookings().map((b) => [b.id, b]));
+  member.history = member.history.map((e) => {
+    const b = e.bookingId && byId.get(e.bookingId);
+    if (!b) return e;
+    const spot = getSpot(b.spotId);
+    return {
+      ...e,
+      spotLabel: spot?.label || 'a removed spot',
+      date: b.date,
+      startTime: b.startTime,
+      hours: b.hours,
+      // The other person: the host when you parked, the driver when you hosted.
+      counterpart: e.reason === 'parked' ? b.hostName : b.userName,
+    };
+  });
+  res.json(member);
 });
 
 // --- Instant assignment ----------------------------------------------------

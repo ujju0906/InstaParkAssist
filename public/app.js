@@ -184,7 +184,10 @@ async function loadPointsRules() {
   document.querySelectorAll('.rule-welcome').forEach((el) => (el.textContent = pointsRules.welcomePoints));
 }
 
-/** Show the signed-in member's balance on the Find tab. */
+/**
+ * Refresh the signed-in member's points everywhere they're shown: the
+ * balance line on Find parking, the header chip, and the profile panel.
+ */
 async function showFindBalance() {
   const el = document.getElementById('find-balance');
   if (!me) return;
@@ -193,10 +196,65 @@ async function showFindBalance() {
     el.textContent = m.isNew
       ? `Booking as ${me.displayName}. You'll start with ${pts(m.balance)}.`
       : `Booking as ${m.name}: ${pts(m.balance)} (${m.earned} earned hosting, ${m.spent} spent parking).`;
+    renderProfile(m);
   } catch {
     el.textContent = '';
   }
 }
+
+// --- Profile ---------------------------------------------------------------
+
+/** One ledger entry as a sentence, e.g. "Maria G. parked at Clay St driveway". */
+function historyText(e) {
+  const when = e.date ? ` · ${fmtDate(e.date)}, ${e.startTime} for ${e.hours}h` : '';
+  if (e.reason === 'welcome') return 'Welcome points';
+  if (e.reason === 'parked') return `Parked at ${esc(e.spotLabel || 'a spot')}${e.counterpart ? ` (host ${esc(e.counterpart)})` : ''}${esc(when)}`;
+  if (e.reason === 'hosted') return `${esc(e.counterpart || 'Someone')} parked at your ${esc(e.spotLabel || 'spot')}${esc(when)}`;
+  return esc(e.reason);
+}
+
+function renderProfile(m) {
+  document.getElementById('account-points').textContent = pts(m.balance);
+  document.getElementById('profile-name').textContent = me.displayName;
+  document.getElementById('profile-username').textContent = `@${me.username}`;
+  document.getElementById('profile-balance').textContent = m.balance;
+  document.getElementById('profile-earned').textContent = m.earned;
+  document.getElementById('profile-spent').textContent = m.spent;
+
+  const ul = document.getElementById('profile-history');
+  if (m.isNew || !m.history.length) {
+    ul.innerHTML = `<li><span class="sub">No activity yet. You start with ${pts(m.balance)}: book a spot, or host one to earn more.</span></li>`;
+    return;
+  }
+  ul.innerHTML = m.history
+    .map(
+      (e) => `<li><span>${historyText(e)}</span>
+        <strong class="${e.delta < 0 ? 'neg' : 'ok'}">${e.delta > 0 ? '+' : ''}${e.delta}</strong></li>`
+    )
+    .join('');
+}
+
+const profileBtn = document.getElementById('profile-btn');
+const profilePanel = document.getElementById('profile-panel');
+
+function setProfileOpen(open) {
+  profilePanel.hidden = !open;
+  profileBtn.setAttribute('aria-expanded', String(open));
+  if (open) showFindBalance(); // fresh numbers each time it opens
+}
+
+profileBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setProfileOpen(profilePanel.hidden);
+});
+profilePanel.addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => setProfileOpen(false));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !profilePanel.hidden) {
+    setProfileOpen(false);
+    profileBtn.focus();
+  }
+});
 
 // --- Dates -----------------------------------------------------------------
 
@@ -739,6 +797,7 @@ document.getElementById('reset-btn').addEventListener('click', async () => {
   document.getElementById('find-result').innerHTML = '';
   document.getElementById('batch-result').innerHTML = '';
   await loadSpots();
+  await showFindBalance();
 });
 
 // --- Sign in / create account ----------------------------------------------

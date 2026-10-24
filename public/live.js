@@ -386,6 +386,7 @@ function wireLiveEvents(on) {
     animChain = Promise.resolve();
     clearLive();
     loadSpots().catch(console.error);
+    showFindBalance(); // points were cleared too
   });
 }
 
