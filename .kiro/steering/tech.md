@@ -79,6 +79,10 @@
 - Input validation for requests, bookings, and new spots lives in
   `src/requests.js` (`normalizeRequest`, `normalizeWindow`,
   `validateSpotInput`); routes turn `RequestError` into HTTP 400.
-- Money/price is computed for display only; there is no payment integration.
+- There is no money anywhere: bookings cost community points
+  (`src/points.js`: `WELCOME_POINTS` 20, `POINTS_PER_HOUR` 2, `pointsFor()`).
+  Clients read the rules from `GET /api/points` instead of hard-coding them.
+  `assignRequests()` blocks requests the driver can't afford (tallied per
+  member across a batch) before solving.
 - Prefer adding new API routes in `server.js` and keeping business logic in
   `src/`.

@@ -172,7 +172,7 @@ function addLog(b) {
     .map((a) => {
       const r = reqById.get(a.requestId);
       const s = spotById.get(a.spotId);
-      return `<li>#${esc(r.seq)} ${esc(r.userName)} → ${esc(s.label)} <span class="sub">${walkLabel(a.walkMeters, b.distanceSource)}</span></li>`;
+      return `<li>#${esc(r.seq)} ${esc(r.userName)} → ${esc(s.label)} <span class="sub">${walkLabel(a.walkMeters, b.distanceSource)} · ${a.points} pts to ${esc(s.hostName)}</span></li>`;
     })
     .concat(
       b.unassigned.map((u) => {

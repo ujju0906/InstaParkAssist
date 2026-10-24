@@ -14,7 +14,8 @@
 
 import { hungarian } from './hungarian.js';
 import { haversineMeters, walkMinutes } from './distance.js';
-import { getSpots, isSpotAvailable } from './store.js';
+import { getSpots, isSpotAvailable, getBalance } from './store.js';
+import { pointsFor, memberKey } from './points.js';
 import { walkingMatrix, walkingRoutes } from './routing.js';
 
 /**
@@ -28,9 +29,11 @@ export const MAX_STRAIGHT_LINE_M = 2000;
  * Build the cost matrix. Rows = requests, cols = spots usable by at least one
  * request. cost[i][j] = walking meters, or Infinity if spot j can't serve i.
  */
-export async function buildProblem(requests) {
+export async function buildProblem(requests, blocked = new Set()) {
   const usable = (r, s) =>
-    isSpotAvailable(s, r.date, r.startMin, r.endMin) && haversineMeters(r, s) <= MAX_STRAIGHT_LINE_M;
+    !blocked.has(r.id) &&
+    isSpotAvailable(s, r.date, r.startMin, r.endMin) &&
+    haversineMeters(r, s) <= MAX_STRAIGHT_LINE_M;
 
   const candidateSpots = getSpots().filter((s) => requests.some((r) => usable(r, s)));
   if (candidateSpots.length === 0) {
@@ -91,13 +94,38 @@ function emptyResult() {
 }
 
 /**
+ * Drivers who can't afford their booking are left out of the matching (their
+ * row is all forbidden), so they never take a spot someone else could use.
+ * Points are tallied per member across the batch, in arrival order, so one
+ * person sending several requests can't overspend.
+ *
+ * @returns {Map<string, string>} request id -> reason it was blocked
+ */
+function blockUnaffordable(requests) {
+  const remaining = new Map();
+  const blocked = new Map();
+  for (const r of requests) {
+    const key = memberKey(r.userName);
+    if (!remaining.has(key)) remaining.set(key, getBalance(r.userName));
+    const cost = pointsFor(r.hours);
+    if (remaining.get(key) < cost) {
+      blocked.set(r.id, `not enough points (needs ${cost}, has ${remaining.get(key)})`);
+    } else {
+      remaining.set(key, remaining.get(key) - cost);
+    }
+  }
+  return blocked;
+}
+
+/**
  * @param {Array<{id:string,userName:string,lat:number,lng:number,label:string,startMin:number,endMin:number}>} requests
  * @param {{ withRoutes?: boolean }} [opts] withRoutes: attach walking path geometry to each assignment
  */
 export async function assignRequests(requests, { withRoutes = true } = {}) {
   if (!Array.isArray(requests) || requests.length === 0) return emptyResult();
 
-  const { candidateSpots, cost, distanceSource } = await buildProblem(requests);
+  const blocked = blockUnaffordable(requests);
+  const { candidateSpots, cost, distanceSource } = await buildProblem(requests, new Set(blocked.keys()));
 
   const t0 = performance.now();
   const { assignment } = hungarian(cost);
@@ -120,16 +148,17 @@ export async function assignRequests(requests, { withRoutes = true } = {}) {
         spot,
         walkMeters: Math.round(meters),
         walkMinutes: Math.max(1, Math.round(walkMinutes(meters))),
-        price: +(spot.pricePerHour * ((req.endMin - req.startMin) / 60)).toFixed(2),
+        points: pointsFor(req.hours),
         route: null,
       });
     } else {
       unassigned.push({
         ...req,
         reason:
-          candidateSpots.length === 0
+          blocked.get(req.id) ||
+          (candidateSpots.length === 0
             ? 'no spots within 2 km are free on that date and time'
-            : 'no free spot left for that date and time',
+            : 'no free spot left for that date and time'),
       });
     }
   });

@@ -94,9 +94,8 @@ function renderSpots(selectedIds = new Set()) {
   spots.forEach((s) => {
     const m = L.marker([s.lat, s.lng], { icon: spotIcon(selectedIds.has(s.id)) });
     m.bindPopup(
-      `<strong>${esc(s.label)}</strong><br>Host: ${esc(s.hostName)}<br>$${s.pricePerHour.toFixed(
-        2
-      )}/hr<br>${esc(fmtDateRange(s))}<br>Daily ${esc(s.availableFrom)}–${esc(s.availableUntil)}`
+      `<strong>${esc(s.label)}</strong><br>Host: ${esc(s.hostName)}<br>${esc(fmtDateRange(s))}<br>` +
+        `Daily ${esc(s.availableFrom)}–${esc(s.availableUntil)}<br>${pointsRules.pointsPerHour} points/hr, same as every spot`
     );
     m.addTo(spotLayer);
     spotMarkers.set(s.id, m);
@@ -141,6 +140,39 @@ function distanceNote(source) {
 
 function walkLabel(meters, source) {
   return source === 'routed' ? fmtMeters(meters) : `≈${fmtMeters(meters)}`;
+}
+
+// --- Community points ------------------------------------------------------
+
+// Defaults match src/points.js; replaced by GET /api/points at boot.
+let pointsRules = { welcomePoints: 20, pointsPerHour: 2 };
+
+function pts(n) {
+  return `${n} point${n === 1 ? '' : 's'}`;
+}
+
+async function loadPointsRules() {
+  pointsRules = await api('/api/points');
+  document.querySelectorAll('.rule-per-hour').forEach((el) => (el.textContent = pointsRules.pointsPerHour));
+  document.querySelectorAll('.rule-welcome').forEach((el) => (el.textContent = pointsRules.welcomePoints));
+}
+
+/** Show the driver's balance under the name field as they type. */
+let balanceTimer = null;
+function showFindBalance() {
+  clearTimeout(balanceTimer);
+  balanceTimer = setTimeout(async () => {
+    const name = document.getElementById('find-name').value.trim() || 'You';
+    const el = document.getElementById('find-balance');
+    try {
+      const m = await api(`/api/members/${encodeURIComponent(name)}`);
+      el.textContent = m.isNew
+        ? `${name} is new: you'll start with ${pts(m.balance)}.`
+        : `${m.name} has ${pts(m.balance)} (${m.earned} earned hosting, ${m.spent} spent parking).`;
+    } catch {
+      el.textContent = '';
+    }
+  }, 250);
 }
 
 // --- Dates -----------------------------------------------------------------
@@ -306,7 +338,7 @@ document.getElementById('find-assign').addEventListener('click', async () => {
   const startTime = document.getElementById('find-start').value || '09:00';
   const userName = document.getElementById('find-name').value.trim() || 'You';
 
-  resultEl.innerHTML = `<p class="hint">Finding the best spot by walking distance…</p>`;
+  resultEl.innerHTML = `<p class="hint">Finding the spot with the shortest walk…</p>`;
   try {
     const data = await api('/api/assign', {
       method: 'POST',
@@ -323,6 +355,7 @@ document.getElementById('find-assign').addEventListener('click', async () => {
     }
 
     const a = data.assignments[0];
+    const balance = data.points.balances[userName];
     renderSpots(new Set([a.spot.id]));
     routeLayer.clearLayers();
     const line = drawWalk(routeLayer, a.route, a.spot, findDest);
@@ -335,8 +368,9 @@ document.getElementById('find-assign').addEventListener('click', async () => {
           Host: ${esc(a.spot.hostName)}<br>
           Walk: <strong class="ok">${walkLabel(a.walkMeters, data.distanceSource)}</strong> (~${a.walkMinutes} min)<br>
           <span class="sub">${distanceNote(data.distanceSource)}</span><br>
-          Price: $${a.price.toFixed(2)} for ${hours}h ($${a.spot.pricePerHour.toFixed(2)}/hr)<br>
-          When: ${esc(fmtDate(date))}, ${esc(startTime)} for ${hours}h
+          When: ${esc(fmtDate(date))}, ${esc(startTime)} for ${hours}h<br>
+          Points: <strong>${pts(a.points)}</strong> to ${esc(a.spot.hostName)}
+          (${pointsRules.pointsPerHour}/hr) · your balance ${balance} → ${balance - a.points}
         </div>
         <div class="btn-row">
           <button class="primary" id="book-btn">Book this spot</button>
@@ -345,7 +379,7 @@ document.getElementById('find-assign').addEventListener('click', async () => {
 
     document.getElementById('book-btn').addEventListener('click', async () => {
       try {
-        await api('/api/book', {
+        const booking = await api('/api/book', {
           method: 'POST',
           body: JSON.stringify({
             spotId: a.spot.id,
@@ -358,7 +392,9 @@ document.getElementById('find-assign').addEventListener('click', async () => {
         });
         resultEl.innerHTML = `<div class="card"><div class="big ok">Booked ✓</div>
           <div class="meta">${esc(a.spot.label)} is reserved on ${esc(fmtDate(date))},
-          ${esc(startTime)} for ${hours}h.</div></div>`;
+          ${esc(startTime)} for ${hours}h.<br>
+          ${pts(booking.points)} went to ${esc(a.spot.hostName)}. You have ${pts(booking.balance)} left.</div></div>`;
+        showFindBalance();
         await loadSpots();
       } catch (err) {
         resultEl.insertAdjacentHTML('beforeend', `<p class="err">${esc(err.message)}</p>`);
@@ -400,7 +436,6 @@ document.getElementById('host-add').addEventListener('click', async () => {
     hostName: document.getElementById('host-name').value.trim(),
     lat: hostSpot.lat,
     lng: hostSpot.lng,
-    pricePerHour: +document.getElementById('host-price').value || 0,
     availableFrom: document.getElementById('host-from').value || '00:00',
     availableUntil: document.getElementById('host-until').value || '23:59',
     availableFromDate: document.getElementById('host-from-date').value || null,
@@ -426,7 +461,7 @@ function renderHostList() {
   ul.innerHTML = '';
   spots.forEach((s) => {
     const li = document.createElement('li');
-    li.innerHTML = `<span>${esc(s.label)} · $${s.pricePerHour.toFixed(2)}/hr<br>
+    li.innerHTML = `<span>${esc(s.label)} · ${esc(s.hostName)}<br>
       <span class="sub">${esc(fmtDateRange(s))} · ${esc(s.availableFrom)}–${esc(s.availableUntil)}</span></span>`;
     const del = document.createElement('button');
     del.className = 'x';
@@ -457,7 +492,7 @@ function hostSpotRow(s, date) {
         (b) =>
           `<li>${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.userName)}${
             b.destinationLabel ? ` → ${esc(b.destinationLabel)}` : ''
-          } · $${Number(b.price || 0).toFixed(2)}</li>`
+          } · ${pts(b.points || 0)}</li>`
       )
       .join('')}</ul>`;
   } else if (date) {
@@ -468,7 +503,7 @@ function hostSpotRow(s, date) {
     <li data-spot-id="${esc(s.id)}" tabindex="0" role="button"
         aria-label="Show ${esc(s.label)} on map" class="${date && !s.openOnDate ? 'closed' : ''}">
       <span>${esc(s.label)}</span>
-      <span class="sub">$${s.pricePerHour.toFixed(2)}/hr · ${esc(fmtDateRange(s))} ·
+      <span class="sub">${esc(fmtDateRange(s))} ·
         ${esc(s.availableFrom)}–${esc(s.availableUntil)} · ${booked}</span>
       ${dayInfo}
     </li>`;
@@ -478,7 +513,7 @@ async function loadHosts() {
   const el = document.getElementById('hosts-list');
   const date = document.getElementById('hosts-date').value;
   document.getElementById('hosts-date-note').textContent = date
-    ? `Showing bookings and earnings for ${fmtDate(date)}.`
+    ? `Showing bookings and points earned on ${fmtDate(date)}.`
     : 'Showing all dates.';
   try {
     const hosts = await api(date ? `/api/hosts?date=${encodeURIComponent(date)}` : '/api/hosts');
@@ -497,7 +532,8 @@ async function loadHosts() {
           </div>
           <div class="meta">
             ${h.bookingCount} booking${h.bookingCount === 1 ? '' : 's'} ·
-            $${h.earnings.toFixed(2)} earned${date ? ' this day' : ''}
+            ${pts(h.pointsEarned)} earned${date ? ' this day' : ''} ·
+            balance ${pts(h.balance)}
           </div>
           <ul class="spot-list host-spots">
             ${h.spots.map((s) => hostSpotRow(s, date)).join('')}
@@ -516,6 +552,41 @@ async function loadHosts() {
         }
       });
     });
+  } catch (err) {
+    el.innerHTML = `<p class="err">${esc(err.message)}</p>`;
+  }
+  await loadMembers();
+}
+
+/** Everyone's points: balance, earned by hosting, spent parking. */
+async function loadMembers() {
+  const el = document.getElementById('members-list');
+  try {
+    const members = await api('/api/members');
+    if (!members.length) {
+      el.innerHTML = `<p class="hint">No points have moved yet. Book a spot to get started.</p>`;
+      return;
+    }
+    el.innerHTML = `
+      <table class="members">
+        <caption class="sr-only">Community points per member</caption>
+        <thead><tr>
+          <th scope="col">Member</th>
+          <th scope="col" class="num">Balance</th>
+          <th scope="col" class="num">Earned</th>
+          <th scope="col" class="num">Spent</th>
+        </tr></thead>
+        <tbody>${members
+          .map(
+            (m) => `<tr>
+              <td>${esc(m.name)}</td>
+              <td class="num">${m.balance}</td>
+              <td class="num">${m.earned}</td>
+              <td class="num">${m.spent}</td>
+            </tr>`
+          )
+          .join('')}</tbody>
+      </table>`;
   } catch (err) {
     el.innerHTML = `<p class="err">${esc(err.message)}</p>`;
   }
@@ -596,7 +667,7 @@ document.getElementById('batch-run').addEventListener('click', async () => {
     const rows = data.assignments
       .map(
         (a) => `<div class="card"><div class="big">${esc(a.request.label)} → ${esc(a.spot.label)}</div>
-          <div class="meta">Walk ${walkLabel(a.walkMeters, src)} (~${a.walkMinutes} min) · $${a.price.toFixed(2)}</div></div>`
+          <div class="meta">Walk ${walkLabel(a.walkMeters, src)} (~${a.walkMinutes} min) · ${pts(a.points)}</div></div>`
       )
       .join('');
 
@@ -637,7 +708,13 @@ document.getElementById('reset-btn').addEventListener('click', async () => {
 
 // --- Boot ------------------------------------------------------------------
 
-loadSpots().catch((err) => {
-  console.error(err);
-  alert('Could not load spots: ' + err.message);
-});
+document.getElementById('find-name').addEventListener('input', showFindBalance);
+
+loadPointsRules()
+  .catch((err) => console.error('Could not load points rules:', err))
+  .then(() => loadSpots())
+  .then(() => showFindBalance())
+  .catch((err) => {
+    console.error(err);
+    alert('Could not load spots: ' + err.message);
+  });

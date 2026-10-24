@@ -10,6 +10,8 @@ ParkAssistKiro/
 │   ├── routing.js         # Walking distances/paths along streets (OSRM) + cache
 │   ├── assign.js          # Builds cost matrix, runs solver, greedy baseline
 │   ├── requests.js        # Request validation/normalization (shared)
+│   ├── points.js          # Community points rules: welcome grant, flat rate (pure)
+│   ├── dates.js           # YYYY-MM-DD helpers: validate, today, add days (pure)
 │   ├── batcher.js         # Live queue: batch window -> solve -> book -> events
 │   ├── simulator.js       # In-process demo traffic driven by an arrival plan
 │   ├── demoData.js        # Demo destinations, random + scripted "rush" plans (pure)
@@ -45,7 +47,7 @@ ParkAssistKiro/
   `wireSearch()` (used by Find and Host). Any user-provided text inserted as
   HTML must go through `esc()`.
 - **GET /api/hosts** — derived view, not stored: spots grouped by `hostName`
-  with booking counts and earnings computed from bookings.
+  with booking counts and points earned computed from bookings.
 - **Live pipeline** — `POST /api/requests` and the simulator both call
   `batcher.enqueue()`. The batcher emits `request` / `window` / `batch` events;
   `server.js` relays them over SSE (`/api/events`) to `public/live.js`, which
@@ -57,18 +59,27 @@ ParkAssistKiro/
 
 ## Data model
 
-- **Spot**: `{ id, hostName, label, lat, lng, pricePerHour, availableFrom,
+- **Spot**: `{ id, hostName, label, lat, lng, availableFrom,
   availableUntil, availableFromDate, availableUntilDate }`. Times are daily
   hours; the dates are an optional inclusive range (`null` = no limit). Seed
   spots have no date range so demos work on any day.
 - **Booking**: `{ id, spotId, userName, date, startTime, hours, startMin,
-  endMin, price, destinationLabel }`. Overlap is only checked against bookings
+  endMin, points, hostName, destinationLabel }`. Overlap is only checked against bookings
   with the same `date`. Bookings saved before dates existed are migrated to
   the server's "today" on load.
 - **Request** (transient, not stored): `{ userName, lat, lng, label, date,
   startTime, hours }` → normalized by `normalizeWindow()` in `requests.js`
   (date defaults to today; past, >365 days ahead, or past-midnight windows are
   rejected) and expanded with `startMin`/`endMin`.
+- **Members** (`db.members`, keyed by `memberKey(name)`, case-insensitive):
+  `{ name, joinedAt }`, created on first park/host with a `welcome` grant.
+- **Ledger** (`db.ledger`): `{ id, member, delta, reason: 'welcome' |
+  'parked' | 'hosted', bookingId?, at }`. Balances are never stored; they're
+  the sum of a member's entries. Each booking writes a matching `parked`
+  (−points) and `hosted` (+points) pair.
 - Availability lives in one place: `isSpotAvailable(spot, date, startMin,
   endMin)` in `store.js`. Every path (assign, batch re-check, /api/book) must
   go through it.
+- Bookings are only created through `createBooking(spot, booking)`, which
+  checks the driver's balance and writes the booking and both ledger entries
+  in one step. Never push to `db.bookings` directly.

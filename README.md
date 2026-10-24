@@ -1,6 +1,8 @@
 # Instant Park Assist
 
-An "Airbnb for parking." Hosts list their parking spots; drivers enter where
+A non-profit, community "Airbnb for parking." No money changes hands: hosts
+share their spots and earn community points, and drivers spend points to park
+(see [Community points](#community-points)). Hosts list their parking spots; drivers enter where
 they're going and for how long, and the app **auto-assigns the nearest available
 spot**. When several drivers request parking at once, assignments are optimized
 with the **Hungarian algorithm (Kuhn-Munkres)** to minimize the *total* walking
@@ -34,11 +36,32 @@ npm test
   click. Only spots within 2 km (straight line) of the destination are
   considered.
 - **Host a spot** — search your spot's address (or click the map) to place it,
-  set price/hour, the dates it's offered (end date optional) and its daily
-  hours, and publish.
+  set the dates it's offered (end date optional) and its daily hours, and
+  publish. There's no price to set.
 - **Hosts** — directory of every host with their spots, booking counts, and
-  earnings. Pick a date to see which spots are offered that day, who's booked
-  when, and that day's earnings. Click a spot to jump to it on the map.
+  points earned, plus a community points table (everyone's balance, points
+  earned hosting, points spent parking). Pick a date to see which spots are
+  offered that day, who's booked when, and that day's points. Click a spot to
+  jump to it on the map.
+
+### Community points
+
+Parking runs on a points time bank instead of prices:
+
+- Everyone starts with **20 points**, once, the first time they park or host.
+- Parking costs a flat **2 points per hour** (1 per half hour) at every spot.
+  Hosts don't set prices, so no spot can be priced up and nobody profits from
+  demand.
+- The points a driver spends go straight to the spot's host. Sharing your
+  spot is how you earn parking for yourself.
+- Points can't be bought or cashed out, and they're only moved between
+  members, never created (apart from the welcome grant) or destroyed.
+- A booking is refused if the driver doesn't have enough points. In a batch,
+  unaffordable requests are left out before matching, so they never take a
+  spot from someone else.
+
+Balances are computed from a ledger (`welcome`, `parked`, `hosted` entries),
+so they always add up. The rules live in `src/points.js`.
 
 ### Availability rules
 
@@ -144,11 +167,14 @@ Core pieces:
 | GET    | `/api/spots`       | List spots (`?date=` only those offered that day) |
 | POST   | `/api/spots`       | Add a spot (host): daily hours + optional date range |
 | DELETE | `/api/spots/:id`   | Remove a spot                             |
-| GET    | `/api/hosts`       | Hosts directory (`?date=` that day's bookings + earnings) |
+| GET    | `/api/hosts`       | Hosts directory (`?date=` that day's bookings + points) |
+| GET    | `/api/points`      | Points rules (welcome grant, points per hour) |
+| GET    | `/api/members`     | Every member's balance, earned, spent     |
+| GET    | `/api/members/:name` | One member's balance + recent history   |
 | POST   | `/api/assign`      | Instant assignment, nothing booked        |
-| POST   | `/api/book`        | Book a spot for a date + time window      |
+| POST   | `/api/book`        | Book a date + time window (driver pays the host in points) |
 | GET    | `/api/bookings`    | List bookings (`?date=`, `?spotId=`)      |
-| DELETE | `/api/bookings`    | Clear all bookings (keeps spots)          |
+| DELETE | `/api/bookings`    | Clear all bookings and points (keeps spots) |
 | POST   | `/api/reset`       | Reset demo data to the seed               |
 | POST   | `/api/requests`    | Queue request(s) for batched assignment   |
 | GET    | `/api/events`      | Server-Sent Events stream of the queue    |
@@ -174,7 +200,7 @@ in November from 08:00 to 18:00:
 POST /api/spots
 {
   "label": "Driveway on Clay St", "hostName": "Maria G.", "lat": 37.7946, "lng": -122.4006,
-  "pricePerHour": 4.5, "availableFrom": "08:00", "availableUntil": "18:00",
+  "availableFrom": "08:00", "availableUntil": "18:00",
   "availableFromDate": "2026-11-01", "availableUntilDate": "2026-11-30"
 }
 ```
@@ -192,7 +218,10 @@ notes.
   public router is rate-limited (see above).
 - Requested coordinates are sent to the configured router. With the default
   public server that's a third party; self-host OSRM to keep them in-house.
-- Prices are computed for display; there's no real payment flow.
+- Members are identified by the name they type (case-insensitive), so anyone
+  can spend another member's points by typing their name. Points need real
+  accounts before this is used beyond a demo.
+- There are no cancellations yet, so points can't be refunded.
 - No authentication; names are free-text labels. Anyone who can reach the
   server can queue requests, start/stop the simulator, or clear bookings.
 - Within a batch each spot goes to at most one driver, even if two drivers'

@@ -23,7 +23,7 @@
 
 import { EventEmitter } from 'node:events';
 import { assignRequests } from './assign.js';
-import { addBooking, isSpotAvailable } from './store.js';
+import { createBooking, isSpotAvailable, getBalance } from './store.js';
 import { normalizeRequest } from './requests.js';
 
 function emptyStats() {
@@ -94,8 +94,7 @@ export class Batcher extends EventEmitter {
           unassigned.push({ requestId: a.request.id, reason: 'spot was booked by someone else while solving' });
           continue;
         }
-        const booking = addBooking({
-          spotId: a.spot.id,
+        const { booking, error } = createBooking(a.spot, {
           userName: a.request.userName,
           destinationLabel: a.request.label,
           date: a.request.date,
@@ -103,16 +102,21 @@ export class Batcher extends EventEmitter {
           hours: a.request.hours,
           startMin: a.request.startMin,
           endMin: a.request.endMin,
-          price: a.price,
           walkMeters: a.walkMeters,
           source: 'batch',
         });
+        if (error) {
+          // e.g. the driver spent points through another booking while we were routing
+          unassigned.push({ requestId: a.request.id, reason: error });
+          continue;
+        }
         assignments.push({
           requestId: a.request.id,
           spotId: a.spot.id,
           walkMeters: a.walkMeters,
           walkMinutes: a.walkMinutes,
-          price: a.price,
+          points: booking.points,
+          balance: getBalance(a.request.userName), // driver's points after paying
           route: a.route, // [[lat, lng], ...] along streets, or null
           bookingId: booking.id,
         });
@@ -126,14 +130,7 @@ export class Batcher extends EventEmitter {
       const payload = {
         batchId: this.stats.batches,
         requests: batch,
-        spots: result.candidateSpots.map(({ id, label, hostName, lat, lng, pricePerHour }) => ({
-          id,
-          label,
-          hostName,
-          lat,
-          lng,
-          pricePerHour,
-        })),
+        spots: result.candidateSpots.map(({ id, label, hostName, lat, lng }) => ({ id, label, hostName, lat, lng })),
         // Walking meters along streets; null = not available for that time window
         cost: result.cost.map((row) => row.map((c) => (Number.isFinite(c) ? Math.round(c) : null))),
         distanceSource: result.distanceSource,

@@ -18,7 +18,7 @@
         <span class="logo">P</span>
         <div>
           <h1>Instant Park Assist</h1>
-          <p>Airbnb for parking — auto-matched to your destination</p>
+          <p>Community parking: share your spot, earn points, park for free</p>
         </div>
       </div>
       <nav class="tabs">
@@ -60,8 +60,9 @@
             </div>
           </div>
 
-          <label>Your name (optional)</label>
-          <input id="find-name" type="text" placeholder="Alex" />
+          <label for="find-name">Your name</label>
+          <input id="find-name" type="text" placeholder="Alex" autocomplete="name" />
+          <p class="hint tight" id="find-balance" aria-live="polite"></p>
 
           <button id="find-assign" class="primary">Find my spot</button>
 
@@ -89,12 +90,11 @@
           <label for="host-name">Host name</label>
           <input id="host-name" type="text" placeholder="Maria G." />
 
-          <div class="row">
-            <div class="field">
-              <label>Price / hour ($)</label>
-              <input id="host-price" type="number" min="0" step="0.25" value="5" />
-            </div>
-          </div>
+          <p class="points-note">
+            No prices, no money. Every spot earns its host the same
+            <strong><span class="rule-per-hour">2</span> points per hour</strong> it's used,
+            which you can spend on parking yourself.
+          </p>
           <div class="row">
             <div class="field">
               <label for="host-from-date">Available from (date)</label>
@@ -176,6 +176,13 @@
           </div>
           <p class="hint tight" id="hosts-date-note">Showing all dates.</p>
           <div id="hosts-list"></div>
+
+          <h3>Community points</h3>
+          <p class="hint tight">
+            Everyone starts with <span class="rule-welcome">20</span> points. Parking costs
+            <span class="rule-per-hour">2</span> points per hour, paid to the spot's host.
+          </p>
+          <div id="members-list"></div>
         </div>
 
         <!-- LIVE BATCHING DEMO -->
@@ -212,7 +219,7 @@
           </div>
           <label class="check">
             <input id="live-clear" type="checkbox" checked />
-            Clear existing bookings first (all dates)
+            Clear existing bookings and points first (all dates)
           </label>
           <div class="btn-row">
             <button id="live-start" class="primary">Start simulation</button>

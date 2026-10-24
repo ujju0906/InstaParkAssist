@@ -1,13 +1,15 @@
 # Product: Instant Park Assist
 
-Instant Park Assist is an "Airbnb for parking." It connects people who have an
+Instant Park Assist is a non-profit, community "Airbnb for parking," run on
+points instead of money. It connects people who have an
 empty parking spot (hosts) with drivers who need one near a specific
 destination (users).
 
 ## Who it's for
 
-- **Hosts** — anyone with a driveway, garage, or private stall who wants to earn
-  by renting it out during set hours.
+- **Hosts** — anyone with a driveway, garage, or private stall who's willing to
+  share it during set hours, earning community points they can spend on
+  parking themselves.
 - **Users** — drivers heading to a specific building/address who want the
   closest available spot for a chosen number of hours, without manually
   comparing listings.
@@ -15,9 +17,22 @@ destination (users).
 ## Host experience
 
 - Hosts place a spot by searching its address (same geocoder as the driver
-  search) or by clicking the map, then set price and availability.
+  search) or by clicking the map, then set availability (no price).
 - The **Hosts** tab is a directory of every host, their spots, booking counts,
-  and earnings. Hosts are grouped by name until accounts exist.
+  and points earned, plus every member's points balance. Hosts are grouped by
+  name until accounts exist.
+
+## Non-profit: community points, not money
+
+The app is deliberately non-profit. There are no prices and no payments:
+
+- Every member gets a one-time welcome grant (20 points).
+- Parking costs the same flat rate everywhere (2 points/hour). Hosts can't set
+  prices, so there's no surge pricing and no profit motive.
+- The driver's points go to the host. Points move between members; they're
+  never bought, cashed out, created (except the welcome grant) or destroyed.
+- Don't reintroduce prices, per-spot rates, fees, or anything that converts
+  points to money without an explicit product decision.
 
 ## Core experience
 
@@ -59,7 +74,7 @@ in-app simulator or `npm run simulate`.
 
 ## Spot availability
 
-- Each spot has a per-hour price, daily hours (e.g. 08:00–20:00), and an
+- Each spot has daily hours (e.g. 08:00–20:00) and an
   optional date range it's offered (start and/or end date; none = any date).
 - Drivers always book a **date + time window**. A spot can only be matched or
   booked if the date is in its range, the window fits its daily hours, and no
@@ -69,11 +84,13 @@ in-app simulator or `npm run simulate`.
 - The search only considers spots within 2 km straight-line of the
   destination; within that, the shortest walk along streets wins.
 - The Hosts directory can be filtered by date to show which spots are offered
-  that day, that day's bookings (time, driver, destination), and earnings.
+  that day, that day's bookings (time, driver, destination), and points.
+- A driver must have enough points for the booking; otherwise it's refused.
 
 ## Non-goals (current version)
 
-- Payments/payouts are illustrative (price is computed, not charged).
+- Money of any kind: no prices, payments, payouts, or buying points.
+- Cancellations/refunds (not built yet).
 - No user accounts/auth yet; names are free-text labels.
 - Walking routes don't model building entrances, private gates, elevation, or
   accessibility needs (e.g. step-free routes); they come from OpenStreetMap's

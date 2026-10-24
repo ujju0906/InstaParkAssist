@@ -5,11 +5,14 @@
  *   GET    /api/spots            list spots (?date= only those offered that day)
  *   POST   /api/spots            host adds a spot (daily hours + optional date range)
  *   DELETE /api/spots/:id        host removes a spot
- *   GET    /api/hosts            hosts directory (?date= that day's bookings/earnings)
+ *   GET    /api/hosts            hosts directory (?date= that day's bookings/points)
+ *   GET    /api/points           points rules (welcome grant, points per hour)
+ *   GET    /api/members          every member's points balance
+ *   GET    /api/members/:name    one member's balance + history
  *   POST   /api/assign           instant assignment, nothing booked (Hungarian)
- *   POST   /api/book             confirm a booking for a date + time window
+ *   POST   /api/book             book a date + time window (driver pays host in points)
  *   GET    /api/bookings         list bookings (?date=, ?spotId=)
- *   DELETE /api/bookings         clear all bookings (keeps spots)
+ *   DELETE /api/bookings         clear all bookings and points (keeps spots)
  *   POST   /api/reset            reset data back to the seed
  *
  * Live batching (demo):
@@ -29,8 +32,11 @@ import {
   getSpot,
   addSpot,
   removeSpot,
-  addBooking,
+  createBooking,
   getBookings,
+  getBalance,
+  getMember,
+  getMembers,
   clearBookings,
   isSpotAvailable,
   isSpotOpenOnDate,
@@ -39,6 +45,7 @@ import {
 import { assignRequests } from './src/assign.js';
 import { normalizeRequest, normalizeWindow, validateSpotInput, RequestError } from './src/requests.js';
 import { isValidDate } from './src/dates.js';
+import { WELCOME_POINTS, POINTS_PER_HOUR } from './src/points.js';
 
 const minutesToTime = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 import { Batcher } from './src/batcher.js';
@@ -172,10 +179,11 @@ app.delete('/api/spots/:id', (req, res) => {
 // --- Hosts -----------------------------------------------------------------
 
 /**
- * Hosts directory: spots grouped by host name, with booking counts and
- * earnings. Hosts are identified by name since there are no accounts yet.
+ * Hosts directory: spots grouped by host name, with booking counts and the
+ * community points each host has earned from them. Hosts are identified by
+ * name since there are no accounts yet.
  *
- * ?date=YYYY-MM-DD narrows bookings/earnings to that date, marks whether each
+ * ?date=YYYY-MM-DD narrows bookings/points to that date, marks whether each
  * spot is offered that day, and lists that day's bookings per spot.
  */
 app.get('/api/hosts', (req, res) => {
@@ -189,7 +197,13 @@ app.get('/api/hosts', (req, res) => {
 
   for (const spot of getSpots()) {
     if (!hosts.has(spot.hostName)) {
-      hosts.set(spot.hostName, { hostName: spot.hostName, spots: [], bookingCount: 0, earnings: 0 });
+      hosts.set(spot.hostName, {
+        hostName: spot.hostName,
+        spots: [],
+        bookingCount: 0,
+        pointsEarned: 0,
+        balance: getBalance(spot.hostName),
+      });
     }
     const host = hosts.get(spot.hostName);
     const spotBookings = bookings.filter((b) => b.spotId === spot.id && (!date || b.date === date));
@@ -197,7 +211,7 @@ app.get('/api/hosts', (req, res) => {
     if (date) {
       entry.openOnDate = isSpotOpenOnDate(spot, date);
       entry.bookings = spotBookings
-        .map(({ id, userName, destinationLabel, startTime, startMin, endMin, hours, price }) => ({
+        .map(({ id, userName, destinationLabel, startTime, startMin, endMin, hours, points }) => ({
           id,
           userName,
           destinationLabel,
@@ -205,19 +219,35 @@ app.get('/api/hosts', (req, res) => {
           endTime: minutesToTime(endMin),
           startMin,
           hours,
-          price,
+          points,
         }))
         .sort((a, b) => a.startMin - b.startMin);
     }
     host.spots.push(entry);
     host.bookingCount += spotBookings.length;
-    host.earnings += spotBookings.reduce((sum, b) => sum + (b.price || 0), 0);
+    host.pointsEarned += spotBookings.reduce((sum, b) => sum + (b.points || 0), 0);
   }
 
-  const list = [...hosts.values()]
-    .map((h) => ({ ...h, earnings: +h.earnings.toFixed(2) }))
-    .sort((a, b) => a.hostName.localeCompare(b.hostName));
-  res.json(list);
+  res.json([...hosts.values()].sort((a, b) => a.hostName.localeCompare(b.hostName)));
+});
+
+// --- Community points ------------------------------------------------------
+
+/** The rules, so clients don't hard-code them. */
+app.get('/api/points', (_req, res) => {
+  res.json({ welcomePoints: WELCOME_POINTS, pointsPerHour: POINTS_PER_HOUR });
+});
+
+/** Every member with their balance, points earned by hosting, and points spent parking. */
+app.get('/api/members', (_req, res) => {
+  res.json(getMembers().sort((a, b) => a.name.localeCompare(b.name)));
+});
+
+/** One member's balance and recent history. Unknown names show the welcome balance. */
+app.get('/api/members/:name', (req, res) => {
+  const name = String(req.params.name).trim().slice(0, 80);
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  res.json(getMember(name));
 });
 
 // --- Instant assignment ----------------------------------------------------
@@ -243,7 +273,10 @@ app.post('/api/assign', async (req, res) => {
   }
 
   try {
-    res.json(await assignRequests(requests));
+    const result = await assignRequests(requests);
+    // Each driver's current points, so the UI can show "20 → 16" before booking.
+    const balances = Object.fromEntries(requests.map((r) => [r.userName, getBalance(r.userName)]));
+    res.json({ ...result, points: { perHour: POINTS_PER_HOUR, balances } });
   } catch (err) {
     console.error('Assignment failed:', err);
     res.status(500).json({ error: 'assignment failed' });
@@ -270,15 +303,16 @@ app.post('/api/book', (req, res) => {
     return res.status(409).json({ error: 'spot is not available for that date and time' });
   }
 
-  const booking = addBooking({
-    spotId: spot.id,
-    userName: typeof body.userName === 'string' && body.userName.trim() ? body.userName.trim().slice(0, 80) : 'Anonymous',
+  const userName =
+    typeof body.userName === 'string' && body.userName.trim() ? body.userName.trim().slice(0, 80) : 'Anonymous';
+  const { booking, error } = createBooking(spot, {
+    userName,
     destinationLabel: typeof body.destinationLabel === 'string' ? body.destinationLabel.slice(0, 80) : '',
     ...win,
-    price: +(spot.pricePerHour * ((win.endMin - win.startMin) / 60)).toFixed(2),
   });
+  if (error) return res.status(409).json({ error });
 
-  res.status(201).json(booking);
+  res.status(201).json({ ...booking, balance: getBalance(userName) });
 });
 
 /** ?date=YYYY-MM-DD and/or ?spotId=... to filter. */

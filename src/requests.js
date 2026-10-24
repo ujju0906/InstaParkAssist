@@ -96,17 +96,12 @@ export function validateSpotInput(s = {}) {
     throw new RequestError('available dates: end date is in the past');
   }
 
-  const price = Number(s.pricePerHour);
-  if (!Number.isFinite(price) || price < 0 || price > 1000) {
-    throw new RequestError('price per hour must be between 0 and 1000');
-  }
-
+  // No price: every spot earns its host the same flat points (points.js).
   return {
     lat,
     lng,
     label: clip(s.label),
     hostName: clip(s.hostName),
-    pricePerHour: price,
     availableFrom,
     availableUntil,
     availableFromDate: fromDate,
